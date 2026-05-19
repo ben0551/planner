@@ -130,15 +130,25 @@ export default function MembersPage() {
     if (newPin.length !== 4 || !householdId) return;
     setPinSaving(member.membershipId);
     try {
-      const newPassword = childPassword(householdId, newPin);
-      await pb.collection("users").update(member.userId, {
-        password: newPassword,
-        passwordConfirm: newPassword,
+      const res = await fetch("/api/reset-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: member.userId,
+          membershipId: member.membershipId,
+          householdId,
+          newPin,
+        }),
       });
-      await pb.collection("memberships").update(member.membershipId, { pin: newPin });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error ?? "Failed to reset PIN.");
+      }
       setPinReset(prev => ({ ...prev, [member.membershipId]: "" }));
       setPinSuccess(member.membershipId);
       setTimeout(() => setPinSuccess(null), 2000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to reset PIN.");
     } finally {
       setPinSaving(null);
     }

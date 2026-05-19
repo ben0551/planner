@@ -21,6 +21,9 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL:-http://localhost:8090}
+      # Required for PIN reset — use your PocketBase superuser credentials
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
     depends_on:
       pocketbase:
         condition: service_healthy
