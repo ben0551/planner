@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth";
 import { getClient } from "@/lib/pocketbase";
+import { randomUUID } from "@/lib/utils";
 import { Nav } from "@/components/nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const pb = getClient();
       const household = await pb.collection("households").create({
         name: householdName.trim() || `${(user.name as string).split(" ")[0]}'s Home`,
-        invite_token: crypto.randomUUID(),
+        invite_token: randomUUID(),
       });
       await pb.collection("memberships").create({
         user: user.id,

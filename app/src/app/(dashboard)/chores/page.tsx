@@ -254,7 +254,8 @@ export default function ChoresPage() {
       };
       if (form.type === "everyone") payload.scope = form.scope;
       if (form.type !== "everyone" && form.assignee) payload.assignee = form.assignee;
-      if (form.dueDate) payload.due_date = form.dueDate;
+      if (form.recurrence === "none" && form.dueDate) payload.due_date = form.dueDate;
+      else if (form.recurrence !== "none") payload.due_date = null;
       if (form.deadlineTime) payload.deadline_time = form.deadlineTime;
       if (editingId) {
         await pb.collection("chores").update(editingId, payload);
@@ -282,7 +283,9 @@ export default function ChoresPage() {
   const maxPoints = Math.max(1, ...scoreboard.map(s => s.points));
 
   const activeChores = chores.filter(c => {
-    if (c.recurrence !== "none" && c.due_date && c.due_date < toDateStr(weekStart)) return false;
+    // hide one-off chores whose due date is before this week
+    if (c.recurrence === "none" && c.due_date && c.due_date < toDateStr(weekStart)) return false;
+    // hide other kids' assigned chores
     if (!isOwner && c.assignee && c.assignee !== user?.id) return false;
     return true;
   });

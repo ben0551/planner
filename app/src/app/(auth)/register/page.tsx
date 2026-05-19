@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getClient } from "@/lib/pocketbase";
+import { randomUUID } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,7 +64,7 @@ function RegisterForm() {
         // Create new household
         const household = await pb.collection("households").create({
           name: householdName || `${name}'s Home`,
-          invite_token: crypto.randomUUID(),
+          invite_token: randomUUID(),
         });
         await pb.collection("memberships").create({
           user: user.id,
