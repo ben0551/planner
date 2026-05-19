@@ -32,7 +32,14 @@ jobs:
           context: ./app
           push: true
           tags: ghcr.io/${{ github.repository }}/planner-app:latest
-          build-args: |
-            NEXT_PUBLIC_POCKETBASE_URL=${{ vars.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push PocketBase image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./pb
+          push: true
+          tags: ghcr.io/${{ github.repository }}/planner-pb:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

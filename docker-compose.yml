@@ -1,24 +1,15 @@
 services:
-  pb-init:
-    image: ghcr.io/muchobien/pocketbase:latest
-    container_name: planner-pb-init
-    volumes:
-      - ./pb/pb_data:/pb_data
-    command: ["superuser", "upsert", "${PB_ADMIN_EMAIL}", "${PB_ADMIN_PASSWORD}", "--dir=/pb_data"]
-    restart: "no"
-
   pocketbase:
-    image: ghcr.io/muchobien/pocketbase:latest
+    image: ghcr.io/ben0551/planner/planner-pb:latest
     container_name: planner-pb
     restart: unless-stopped
     ports:
       - "8090:8090"
     volumes:
       - ./pb/pb_data:/pb_data
-    command: ["serve", "--http=0.0.0.0:8090", "--dir=/pb_data"]
-    depends_on:
-      pb-init:
-        condition: service_completed_successfully
+    environment:
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/api/health"]
       interval: 30s
