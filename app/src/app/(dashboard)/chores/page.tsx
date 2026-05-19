@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/context/auth";
-import { getClient, type Chore, type ChoreCompletion, type CachedMember } from "@/lib/pocketbase";
-import { Card, CardContent } from "@/components/ui/card";
+import { useAuth, usePermission } from "@/context/auth";
+import { getClient, type Chore, type ChoreCompletion } from "@/lib/pocketbase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Star, CheckCircle2 } from "lucide-react";
+import { Star, CheckCircle2, Plus, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Member = { id: string; name: string; hasPin: boolean };
@@ -30,33 +28,73 @@ function choreEmoji(title: string) {
 }
 
 const CARD_COLORS = [
-  { bg: "bg-sky-100", border: "border-sky-200", text: "text-sky-800" },
-  { bg: "bg-violet-100", border: "border-violet-200", text: "text-violet-800" },
-  { bg: "bg-amber-100", border: "border-amber-200", text: "text-amber-800" },
-  { bg: "bg-rose-100", border: "border-rose-200", text: "text-rose-800" },
-  { bg: "bg-emerald-100", border: "border-emerald-200", text: "text-emerald-800" },
-  { bg: "bg-orange-100", border: "border-orange-200", text: "text-orange-800" },
-  { bg: "bg-pink-100", border: "border-pink-200", text: "text-pink-800" },
-  { bg: "bg-teal-100", border: "border-teal-200", text: "text-teal-800" },
+  "bg-sky-100 border-sky-200",
+  "bg-violet-100 border-violet-200",
+  "bg-amber-100 border-amber-200",
+  "bg-rose-100 border-rose-200",
+  "bg-emerald-100 border-emerald-200",
+  "bg-orange-100 border-orange-200",
+  "bg-pink-100 border-pink-200",
+  "bg-teal-100 border-teal-200",
 ];
 
-function choreCardColor(id: string) {
+function choreColor(id: string) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return CARD_COLORS[h % CARD_COLORS.length];
 }
 
-function todayStr() {
-  const d = new Date();
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function getMonday(d: Date): Date {
+  const date = new Date(d);
+  const day = date.getDay();
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
+function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function weekStartStr() {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function isDueOnDate(chore: Chore, dateStr: string): boolean {
+  if (chore.recurrence === "daily") return true;
+  if (chore.recurrence === "weekly") return true;
+  if (chore.recurrence === "fortnightly") {
+    if (!chore.due_date) return true;
+    const ref = new Date(chore.due_date);
+    const target = new Date(dateStr);
+    const diffWeeks = Math.round((target.getTime() - ref.getTime()) / (7 * 86400000));
+    return diffWeeks % 2 === 0;
+  }
+  if (chore.recurrence === "monthly") {
+    if (!chore.due_date) return true;
+    return new Date(chore.due_date).getDate() === new Date(dateStr).getDate();
+  }
+  return chore.due_date ? chore.due_date.startsWith(dateStr) : false;
+}
+
+function formatDeadline(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function isPastDeadline(deadlineTime: string, dateStr: string): boolean {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (dateStr !== todayStr) return false;
+  const [h, m] = deadlineTime.split(":").map(Number);
+  const deadline = new Date();
+  deadline.setHours(h, m, 0, 0);
+  return now > deadline;
 }
 
 interface ChoreFormState {
@@ -67,29 +105,31 @@ interface ChoreFormState {
   recurrence: Chore["recurrence"];
   dueDate: string;
   points: number;
+  deadlineTime: string;
 }
 
 const defaultForm = (): ChoreFormState => ({
-  title: "", type: "single", scope: "all", assignee: "", recurrence: "none", dueDate: "", points: 0,
+  title: "", type: "single", scope: "all", assignee: "",
+  recurrence: "daily", dueDate: "", points: 1, deadlineTime: "",
 });
 
 function formFromChore(c: Chore): ChoreFormState {
   return {
-    title: c.title,
-    type: c.type,
-    scope: c.scope ?? "all",
-    assignee: c.assignee ?? "",
-    recurrence: c.recurrence,
-    dueDate: c.due_date ?? "",
-    points: c.points ?? 0,
+    title: c.title, type: c.type, scope: c.scope ?? "all",
+    assignee: c.assignee ?? "", recurrence: c.recurrence,
+    dueDate: c.due_date ?? "", points: c.points ?? 1,
+    deadlineTime: c.deadline_time ?? "",
   };
 }
 
 export default function ChoresPage() {
-  const { householdId, user } = useAuth();
+  const { householdId, user, membership } = useAuth();
   const pb = getClient();
-  const today = todayStr();
-  const weekStart = weekStartStr();
+  const isOwner = membership?.role === "owner";
+  const chorePerm = usePermission("chores");
+
+  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+  const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
 
   const [chores, setChores] = useState<Chore[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -97,47 +137,63 @@ export default function ChoresPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ChoreFormState>(defaultForm());
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const todayStr = toDateStr(new Date());
 
   useEffect(() => {
     if (!householdId) return;
+    const from = toDateStr(weekStart);
+    const to = toDateStr(addDays(weekStart, 6));
     pb.collection("chores")
-      .getFullList({ filter: `household="${householdId}"`, expand: "assignee", sort: "completed,due_date" })
+      .getFullList({ filter: `household="${householdId}"`, expand: "assignee" })
       .then((items) => setChores(items as unknown as Chore[]));
     pb.collection("memberships")
       .getFullList({ filter: `household="${householdId}"`, expand: "user" })
-      .then((ms) =>
-        setMembers(ms.map((m: any) => ({
-          id: m.expand?.user?.id ?? m.user,
-          name: m.expand?.user?.name ?? "Unknown",
-          hasPin: Boolean(m.pin),
-        })))
-      );
+      .then((ms) => setMembers(ms.map((m: any) => ({
+        id: m.expand?.user?.id ?? m.user,
+        name: m.expand?.user?.name ?? "Unknown",
+        hasPin: Boolean(m.pin),
+      }))));
     pb.collection("chore_completions")
-      .getFullList({
-        filter: `chore.household="${householdId}" && date >= "${weekStart} 00:00:00"`,
-      })
+      .getFullList({ filter: `chore.household="${householdId}" && date >= "${from}" && date <= "${to} 23:59:59"` })
       .then((items) => setCompletions(items as unknown as ChoreCompletion[]));
   }, [householdId, weekStart]);
 
-  // Scoreboard
-  const pointsByUser: Record<string, number> = {};
-  for (const c of completions) {
-    pointsByUser[c.user] = (pointsByUser[c.user] ?? 0) + (c.points ?? 0);
+  function isCompletedOnDate(chore: Chore, dateStr: string): boolean {
+    if (chore.type === "everyone") {
+      return completions.some(c => c.chore === chore.id && c.user === (user?.id ?? "") && c.date.startsWith(dateStr));
+    }
+    return completions.some(c => c.chore === chore.id && c.date.startsWith(dateStr));
   }
-  const maxPoints = Math.max(1, ...Object.values(pointsByUser));
-  const scoreboard = [...members]
-    .map((m) => ({ ...m, points: pointsByUser[m.id] ?? 0 }))
-    .sort((a, b) => b.points - a.points);
+
+  async function toggleOnDate(chore: Chore, dateStr: string) {
+    if (!user) return;
+    const existing = completions.find(c =>
+      c.chore === chore.id &&
+      c.date.startsWith(dateStr) &&
+      (chore.type !== "everyone" || c.user === user.id)
+    );
+    if (existing) {
+      await pb.collection("chore_completions").delete(existing.id);
+      setCompletions(prev => prev.filter(c => c.id !== existing.id));
+    } else {
+      const late = chore.deadline_time ? isPastDeadline(chore.deadline_time, dateStr) : false;
+      const created = await pb.collection("chore_completions").create({
+        chore: chore.id, user: user.id, date: dateStr, points: late ? 0 : (chore.points ?? 0),
+      });
+      setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+    }
+  }
+
+  async function deleteChore(id: string) {
+    await pb.collection("chores").delete(id);
+    setChores(prev => prev.filter(c => c.id !== id));
+  }
 
   function setField<K extends keyof ChoreFormState>(k: K, v: ChoreFormState[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
-  function startAdd() {
-    setForm(defaultForm());
-    setEditingId(null);
-    setShowForm(true);
+    setForm(f => ({ ...f, [k]: v }));
   }
 
   function startEdit(chore: Chore) {
@@ -147,14 +203,12 @@ export default function ChoresPage() {
   }
 
   function cancelForm() {
-    setShowForm(false);
-    setEditingId(null);
-    setForm(defaultForm());
+    setShowForm(false); setEditingId(null); setForm(defaultForm());
   }
 
   async function saveChore() {
     if (!form.title.trim() || !householdId) return;
-    setLoading(true);
+    setSaving(true);
     try {
       const payload = {
         household: householdId,
@@ -165,98 +219,126 @@ export default function ChoresPage() {
         recurrence: form.recurrence,
         due_date: form.dueDate || undefined,
         points: form.points,
-        ...(editingId ? {} : { completed: false }),
+        deadline_time: form.deadlineTime || undefined,
+        completed: false,
       };
-
       if (editingId) {
         await pb.collection("chores").update(editingId, payload);
         const full = await pb.collection("chores").getOne(editingId, { expand: "assignee" });
-        setChores((prev) => prev.map((c) => c.id === editingId ? full as unknown as Chore : c));
+        setChores(prev => prev.map(c => c.id === editingId ? full as unknown as Chore : c));
       } else {
         const chore = await pb.collection("chores").create(payload);
         const full = await pb.collection("chores").getOne(chore.id, { expand: "assignee" });
-        setChores((prev) => [...prev, full as unknown as Chore]);
+        setChores(prev => [...prev, full as unknown as Chore]);
       }
       cancelForm();
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
-  async function toggleSingle(chore: Chore) {
-    if (!user) return;
-    const newCompleted = !chore.completed;
-    await pb.collection("chores").update(chore.id, { completed: newCompleted });
-    if (newCompleted) {
-      const created = await pb.collection("chore_completions").create({
-        chore: chore.id, user: user.id, date: today, points: chore.points ?? 0,
-      });
-      setCompletions((prev) => [...prev, created as unknown as ChoreCompletion]);
-    } else {
-      const existing = completions.find((c) => c.chore === chore.id);
-      if (existing) {
-        await pb.collection("chore_completions").delete(existing.id);
-        setCompletions((prev) => prev.filter((c) => c.id !== existing.id));
-      }
-    }
-    setChores((prev) => prev.map((c) => c.id === chore.id ? { ...c, completed: newCompleted } : c));
+  // Scoreboard
+  const pointsByUser: Record<string, number> = {};
+  for (const c of completions) {
+    pointsByUser[c.user] = (pointsByUser[c.user] ?? 0) + (c.points ?? 0);
   }
+  const scoreboard = [...members]
+    .map(m => ({ ...m, points: pointsByUser[m.id] ?? 0 }))
+    .sort((a, b) => b.points - a.points);
+  const maxPoints = Math.max(1, ...scoreboard.map(s => s.points));
 
-  async function toggleEveryoneCompletion(chore: Chore) {
-    if (!user) return;
-    const todayComp = completions.filter((c) => c.date.startsWith(today));
-    const existing = todayComp.find((c) => c.chore === chore.id && c.user === user.id);
-    if (existing) {
-      await pb.collection("chore_completions").delete(existing.id);
-      setCompletions((prev) => prev.filter((c) => c.id !== existing.id));
-    } else {
-      const created = await pb.collection("chore_completions").create({
-        chore: chore.id, user: user.id, date: today, points: chore.points ?? 0,
-      });
-      setCompletions((prev) => [...prev, created as unknown as ChoreCompletion]);
-    }
+  const activeChores = chores.filter(c => c.recurrence !== "none" || !c.due_date || c.due_date >= toDateStr(weekStart));
+  const kidMembers = members.filter(m => m.hasPin);
+
+  const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric" })}`;
+
+  function ChoreCard({
+    chore, dateStr, compact = false,
+  }: {
+    chore: Chore; dateStr: string; compact?: boolean;
+  }) {
+    const done = isCompletedOnDate(chore, dateStr);
+    const col = choreColor(chore.id);
+    const scopeMembers = chore.scope === "kids" ? kidMembers : members;
+    const totalDone = chore.type === "everyone"
+      ? completions.filter(c => c.chore === chore.id && c.date.startsWith(dateStr)).length
+      : 0;
+
+    return (
+      <div
+        onClick={() => toggleOnDate(chore, dateStr)}
+        className={cn(
+          "relative rounded-2xl border flex flex-col items-center text-center cursor-pointer select-none transition-all hover:shadow-sm active:scale-95",
+          compact ? "p-2 gap-1" : "p-3 gap-1.5",
+          col,
+          done && "opacity-50"
+        )}
+      >
+        {isOwner && (
+          <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100"
+            onClick={e => e.stopPropagation()}>
+            <button onClick={() => startEdit(chore)}
+              className="text-[9px] text-muted-foreground hover:text-foreground bg-white/60 rounded px-1 py-0.5">✎</button>
+            <button onClick={() => deleteChore(chore.id)}
+              className="text-[9px] text-muted-foreground hover:text-destructive bg-white/60 rounded px-1 py-0.5">✕</button>
+          </div>
+        )}
+        <span className={cn("leading-none", compact ? "text-2xl mt-0.5" : "text-4xl mt-1")}>
+          {choreEmoji(chore.title)}
+        </span>
+        <p className={cn("font-black leading-tight", compact ? "text-[10px]" : "text-xs", done && "line-through")}>
+          {chore.title}
+        </p>
+        {(chore.points ?? 0) > 0 && (
+          <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-black">
+            <Star className={cn("fill-amber-400 stroke-amber-400", compact ? "h-2 w-2" : "h-2.5 w-2.5")} />
+            {chore.points} pts
+          </span>
+        )}
+        {chore.deadline_time && !done && (
+          <span className="text-[9px] text-rose-600 font-bold">⏰ by {formatDeadline(chore.deadline_time)}</span>
+        )}
+        {chore.type === "everyone" && (
+          <span className="text-[9px] text-muted-foreground">{totalDone}/{scopeMembers.length}</span>
+        )}
+        {done && <CheckCircle2 className={cn("text-emerald-500 mt-0.5", compact ? "h-3.5 w-3.5" : "h-5 w-5")} />}
+      </div>
+    );
   }
-
-  async function deleteChore(id: string) {
-    await pb.collection("chores").delete(id);
-    setChores((prev) => prev.filter((c) => c.id !== id));
-  }
-
-  const todayCompletions = completions.filter((c) => c.date.startsWith(today));
-  const everyoneChores = chores.filter((c) => c.type === "everyone");
-  const activeChores = chores.filter((c) => c.type !== "everyone" && !c.completed);
-  const doneChores = chores.filter((c) => c.type !== "everyone" && c.completed);
-  const kidMembers = members.filter((m) => m.hasPin);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Chores</h1>
-        <Button onClick={showForm ? cancelForm : startAdd} variant={showForm ? "secondary" : "default"} size="sm">
-          {showForm ? "Cancel" : "+ Add chore"}
-        </Button>
+    <div className="flex flex-col gap-5">
+
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-black">Chores</h1>
+        {isOwner && (
+          <button
+            onClick={() => showForm ? cancelForm() : setShowForm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+          >
+            <Plus className="h-4 w-4" />
+            Add chore
+          </button>
+        )}
       </div>
 
       {/* Scoreboard */}
-      {scoreboard.some((m) => m.points > 0) && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      {scoreboard.some(m => m.points > 0) && (
+        <div className="rounded-3xl overflow-hidden shadow-sm border border-border bg-white">
           <div className="px-4 pt-3 pb-1 flex items-center gap-2">
-            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
-            <p className="text-sm font-bold">This week's scores</p>
+            <Trophy className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-black">This week</span>
           </div>
           <div className="px-4 pb-3 flex flex-col gap-2 mt-1">
-            {scoreboard.map((m) => (
+            {scoreboard.map((m, i) => (
               <div key={m.id} className="flex items-center gap-3">
-                <span className="text-sm w-20 truncate font-medium">{m.name.split(" ")[0]}</span>
-                <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-amber-400 transition-all"
-                    style={{ width: `${(m.points / maxPoints) * 100}%` }}
-                  />
+                <span className="text-base w-6 shrink-0">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ""}</span>
+                <span className="text-sm font-bold w-20 truncate">{m.name.split(" ")[0]}</span>
+                <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${(m.points / maxPoints) * 100}%` }} />
                 </div>
-                <span className="text-xs tabular-nums text-amber-600 font-semibold w-14 text-right">
-                  {m.points} pts
-                </span>
+                <span className="text-xs font-bold text-amber-600 w-14 text-right">{m.points} pts</span>
               </div>
             ))}
           </div>
@@ -265,254 +347,206 @@ export default function ChoresPage() {
 
       {/* Add / Edit form */}
       {showForm && (
-        <Card>
-          <CardContent className="pt-4 flex flex-col gap-3">
-            <p className="text-sm font-medium">{editingId ? "Edit chore" : "New chore"}</p>
+        <div className="rounded-3xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
+          <p className="font-black text-sm">{editingId ? "Edit chore" : "New chore"}</p>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Task name</Label>
+            <Input value={form.title} onChange={e => setField("title", e.target.value)} placeholder="e.g. Brush teeth" autoFocus />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
-              <Label>Type</Label>
-              <select
-                value={form.type}
-                onChange={(e) => setField("type", e.target.value as Chore["type"])}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="single">Single complete — one person does it for everyone</option>
-                <option value="everyone">Everyone complete — each person ticks their own</option>
-                <option value="shared">Shared job — split between assigned members</option>
+              <Label className="text-xs">Type</Label>
+              <select value={form.type} onChange={e => setField("type", e.target.value as Chore["type"])}
+                className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                <option value="single">One person does it</option>
+                <option value="everyone">Everyone does it</option>
+                <option value="shared">Shared job</option>
               </select>
             </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Repeats</Label>
+              <select value={form.recurrence} onChange={e => setField("recurrence", e.target.value as Chore["recurrence"])}
+                className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+                <option value="none">Just once</option>
+              </select>
+            </div>
+          </div>
 
-            {form.type === "everyone" && (
+          {form.type === "everyone" && (
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Who needs to do it?</Label>
+              <select value={form.scope} onChange={e => setField("scope", e.target.value as "all" | "kids")}
+                className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                <option value="all">Everyone</option>
+                <option value="kids">Kids only</option>
+              </select>
+            </div>
+          )}
+
+          {form.type !== "everyone" && (
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Assign to</Label>
+              <select value={form.assignee} onChange={e => setField("assignee", e.target.value)}
+                className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                <option value="">Anyone</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Points ⭐</Label>
+              <Input type="number" min={0} value={form.points}
+                onChange={e => setField("points", Math.max(0, parseInt(e.target.value) || 0))} />
+            </div>
+            {form.recurrence === "none" && (
               <div className="flex flex-col gap-1">
-                <Label>Who needs to do it?</Label>
-                <select
-                  value={form.scope}
-                  onChange={(e) => setField("scope", e.target.value as "all" | "kids")}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="all">Everyone in the household</option>
-                  <option value="kids">Kids only</option>
-                </select>
+                <Label className="text-xs">Due date</Label>
+                <Input type="date" value={form.dueDate} onChange={e => setField("dueDate", e.target.value)} />
               </div>
             )}
+          </div>
 
-            <div className="flex flex-col gap-1">
-              <Label>Task</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => setField("title", e.target.value)}
-                placeholder="e.g. Brush teeth"
-                autoFocus
-              />
-            </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Must complete by (optional) ⏰</Label>
+            <Input type="time" value={form.deadlineTime}
+              onChange={e => setField("deadlineTime", e.target.value)} className="w-36" />
+            <p className="text-[11px] text-muted-foreground">No points awarded if completed after this time.</p>
+          </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {form.type !== "everyone" && (
-                <div className="flex flex-col gap-1">
-                  <Label>Assign to</Label>
-                  <select
-                    value={form.assignee}
-                    onChange={(e) => setField("assignee", e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="">Anyone</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="flex flex-col gap-1">
-                <Label>Repeats</Label>
-                <select
-                  value={form.recurrence}
-                  onChange={(e) => setField("recurrence", e.target.value as Chore["recurrence"])}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="none">Once</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="fortnightly">Fortnightly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label>Points</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={form.points}
-                  onChange={(e) => setField("points", Math.max(0, parseInt(e.target.value) || 0))}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Label>Due date</Label>
-              <Input type="date" value={form.dueDate} onChange={(e) => setField("dueDate", e.target.value)} />
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={saveChore} disabled={loading || !form.title.trim()}>
-                {loading ? "Saving…" : editingId ? "Save changes" : "Add chore"}
-              </Button>
-              <Button variant="ghost" onClick={cancelForm}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="flex gap-2">
+            <Button onClick={saveChore} disabled={saving || !form.title.trim()} className="rounded-xl font-bold">
+              {saving ? "Saving…" : editingId ? "Save changes" : "Add chore"}
+            </Button>
+            <Button variant="ghost" onClick={cancelForm} className="rounded-xl">Cancel</Button>
+          </div>
+        </div>
       )}
 
       {chores.length === 0 && !showForm && (
-        <div className="rounded-2xl border border-dashed border-muted-foreground/30 p-8 text-center text-sm text-muted-foreground">
-          No chores yet — tap "+ Add chore" to get started!
+        <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-10 text-center text-muted-foreground text-sm">
+          {isOwner ? "No chores yet — add one above! 🎉" : "No chores set yet."}
         </div>
       )}
 
-      {everyoneChores.length > 0 && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-2 text-sm font-bold">Everyone's chores</div>
-          <div className="flex flex-col divide-y divide-border">
-            {everyoneChores.map((chore) => {
-              const scopeMembers = chore.scope === "kids" ? kidMembers : members;
+      {chores.length > 0 && (
+        <>
+          {/* Week navigation */}
+          <div className="flex items-center justify-between">
+            <button onClick={() => setWeekStart(addDays(weekStart, -7))}
+              className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
+              <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+            </button>
+            <span className="text-sm font-bold text-muted-foreground">{weekLabel}</span>
+            <button onClick={() => setWeekStart(addDays(weekStart, 7))}
+              className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* ── Desktop: day-column card grid ── */}
+          <div className="hidden md:grid gap-2" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+            {weekDates.map((date, i) => {
+              const ds = toDateStr(date);
+              const isToday = ds === todayStr;
+              const dueChores = activeChores.filter(c => isDueOnDate(c, ds));
+              const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
+              const allDone = dueChores.length > 0 && doneCount === dueChores.length;
+
               return (
-                <EveryoneRow
-                  key={chore.id}
-                  chore={chore}
-                  userId={user?.id ?? ""}
-                  completions={todayCompletions.filter((c) => c.chore === chore.id)}
-                  memberCount={scopeMembers.length}
-                  onToggle={toggleEveryoneCompletion}
-                  onEdit={startEdit}
-                  onDelete={deleteChore}
-                />
+                <div key={ds} className="flex flex-col gap-1.5 group">
+                  {/* Day header */}
+                  <div className={cn(
+                    "rounded-2xl p-2 text-center",
+                    isToday ? "bg-primary text-primary-foreground" : "bg-white border border-border"
+                  )}>
+                    <p className={cn("text-[10px] font-black uppercase tracking-wide",
+                      isToday ? "text-primary-foreground/70" : "text-muted-foreground")}>{DAY_NAMES[i]}</p>
+                    <p className="text-lg font-black leading-tight">{date.getDate()}</p>
+                    {dueChores.length > 0 ? (
+                      allDone
+                        ? <p className="text-[9px] font-bold text-emerald-400">✓ All done!</p>
+                        : <p className={cn("text-[9px] font-bold",
+                            isToday ? "text-primary-foreground/60" : "text-muted-foreground")}>
+                            {doneCount}/{dueChores.length}
+                          </p>
+                    ) : (
+                      <p className={cn("text-[9px]",
+                        isToday ? "text-primary-foreground/40" : "text-muted-foreground/40")}>—</p>
+                    )}
+                  </div>
+
+                  {/* Chore cards */}
+                  {dueChores.map(chore => (
+                    <ChoreCard key={chore.id} chore={chore} dateStr={ds} compact />
+                  ))}
+                </div>
               );
             })}
           </div>
-        </div>
-      )}
 
-      {activeChores.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Tasks</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {activeChores.map((chore) => (
-              <ChoreCard key={chore.id} chore={chore} done={false} onToggle={toggleSingle} onEdit={startEdit} onDelete={deleteChore} />
-            ))}
+          {/* ── Mobile: day tabs + card grid ── */}
+          <div className="md:hidden flex flex-col gap-3">
+            {/* Day selector strip */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {weekDates.map((date, i) => {
+                const ds = toDateStr(date);
+                const isToday = ds === todayStr;
+                const selected = i === selectedDay;
+                const dueChores = activeChores.filter(c => isDueOnDate(c, ds));
+                const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
+                return (
+                  <button key={ds} onClick={() => setSelectedDay(i)}
+                    className={cn(
+                      "flex flex-col items-center px-3 py-2 rounded-2xl shrink-0 transition-all font-bold",
+                      selected
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : isToday
+                          ? "bg-primary/10 text-primary"
+                          : "bg-white border border-border text-muted-foreground"
+                    )}>
+                    <span className="text-[10px]">{DAY_NAMES[i]}</span>
+                    <span className="text-lg leading-tight">{date.getDate()}</span>
+                    {dueChores.length > 0 && (
+                      <span className={cn("text-[9px] mt-0.5",
+                        selected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                        {doneCount}/{dueChores.length}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Chore cards for selected day */}
+            {(() => {
+              const ds = toDateStr(weekDates[selectedDay]);
+              const dueToday = activeChores.filter(c => isDueOnDate(c, ds));
+              if (dueToday.length === 0) {
+                return (
+                  <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-8 text-center text-sm text-muted-foreground">
+                    No chores today 🎉
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  {dueToday.map(chore => (
+                    <ChoreCard key={chore.id} chore={chore} dateStr={ds} />
+                  ))}
+                </div>
+              );
+            })()}
           </div>
-        </div>
+        </>
       )}
-
-      {doneChores.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Done</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {doneChores.map((chore) => (
-              <ChoreCard key={chore.id} chore={chore} done={true} onToggle={toggleSingle} onEdit={startEdit} onDelete={deleteChore} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChoreCard({
-  chore, done, onToggle, onEdit, onDelete,
-}: {
-  chore: Chore; done: boolean;
-  onToggle: (c: Chore) => void;
-  onEdit: (c: Chore) => void;
-  onDelete: (id: string) => void;
-}) {
-  const col = choreCardColor(chore.id);
-  const isOverdue = !done && chore.due_date && new Date(chore.due_date) < new Date();
-  return (
-    <div
-      className={cn(
-        "relative rounded-2xl border p-3 flex flex-col items-center gap-1.5 text-center cursor-pointer select-none transition-opacity",
-        col.bg, col.border,
-        done && "opacity-55"
-      )}
-      onClick={() => onToggle(chore)}
-    >
-      <span className="text-3xl leading-none mt-1">{choreEmoji(chore.title)}</span>
-      <p className={cn("text-xs font-semibold leading-tight", col.text, done && "line-through")}>{chore.title}</p>
-      {(chore.points ?? 0) > 0 && (
-        <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold">
-          <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
-          {chore.points} pts
-        </span>
-      )}
-      {chore.expand?.assignee && (
-        <span className={cn("text-[10px] opacity-70", col.text)}>{(chore.expand.assignee as any).name.split(" ")[0]}</span>
-      )}
-      {isOverdue && (
-        <span className="text-[10px] text-destructive font-medium">overdue</span>
-      )}
-      {done && (
-        <div className="absolute top-2 right-2">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-        </div>
-      )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onEdit(chore); }}
-        className="absolute bottom-2 right-2 text-[10px] opacity-40 hover:opacity-80"
-        title="Edit"
-      >✎</button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(chore.id); }}
-        className="absolute top-2 left-2 text-[10px] opacity-30 hover:opacity-70 hover:text-destructive"
-        title="Delete"
-      >✕</button>
-    </div>
-  );
-}
-
-function EveryoneRow({
-  chore, userId, completions, memberCount, onToggle, onEdit, onDelete,
-}: {
-  chore: Chore; userId: string; completions: ChoreCompletion[];
-  memberCount: number;
-  onToggle: (c: Chore) => void;
-  onEdit: (c: Chore) => void;
-  onDelete: (id: string) => void;
-}) {
-  const myDone = completions.some((c) => c.user === userId);
-  const doneCount = completions.length;
-  const pct = memberCount > 0 ? (doneCount / memberCount) * 100 : 0;
-  return (
-    <div
-      className={cn("flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors", myDone && "opacity-60")}
-      onClick={() => onToggle(chore)}
-    >
-      <span className="text-xl shrink-0">{choreEmoji(chore.title)}</span>
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-medium", myDone && "line-through")}>{chore.title}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-xs text-muted-foreground tabular-nums shrink-0">{doneCount}/{memberCount}</span>
-        </div>
-      </div>
-      {chore.scope === "kids" && <Badge variant="outline" className="text-xs">kids</Badge>}
-      {(chore.points ?? 0) > 0 && (
-        <span className="flex items-center gap-0.5 text-xs text-amber-600 font-semibold shrink-0">
-          <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
-          {chore.points}
-        </span>
-      )}
-      {myDone && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
-      <button
-        onClick={(e) => { e.stopPropagation(); onEdit(chore); }}
-        className="text-muted-foreground hover:text-foreground text-xs shrink-0"
-        title="Edit"
-      >✎</button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(chore.id); }}
-        className="text-muted-foreground hover:text-destructive text-xs shrink-0"
-        title="Delete"
-      >✕</button>
     </div>
   );
 }

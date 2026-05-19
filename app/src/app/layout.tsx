@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/auth";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const nunito = Nunito({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -19,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${nunito.variable} h-full antialiased`}>
       <body className="h-full">
         <AuthProvider>{children}</AuthProvider>
       </body>

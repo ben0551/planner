@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { getClient, type Membership, type CachedMember } from "@/lib/pocketbase";
+import { getClient, type Membership, type CachedMember, type PagePermission, type Permissions } from "@/lib/pocketbase";
 import type { RecordModel } from "pocketbase";
 
 interface AuthContextValue {
@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: (mem.expand?.user?.email as string) ?? "",
         role: mem.role as string,
         hasPin: Boolean(mem.pin),
+        permissions: mem.permissions as Permissions | undefined,
       }));
       cacheHousehold(householdId, householdName, cached);
     }
@@ -107,4 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+export function usePermission(page: keyof Permissions): PagePermission {
+  const { membership } = useContext(AuthContext);
+  if (!membership || membership.role === "owner") return "edit";
+  return membership.permissions?.[page] ?? "read";
 }

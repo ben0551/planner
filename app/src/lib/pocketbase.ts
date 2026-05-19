@@ -13,6 +13,25 @@ export function getClient(): PocketBase {
   return pb;
 }
 
+// Permission types
+export type PagePermission = "none" | "read" | "edit";
+
+export interface Permissions {
+  chores: PagePermission;
+  meals: PagePermission;
+  shopping: PagePermission;
+  calendar: PagePermission;
+  rewards: PagePermission;
+}
+
+export const DEFAULT_CHILD_PERMISSIONS: Permissions = {
+  chores: "read",
+  meals: "edit",
+  shopping: "edit",
+  calendar: "read",
+  rewards: "read",
+};
+
 // Types matching our PocketBase collections
 export interface User {
   id: string;
@@ -33,6 +52,7 @@ export interface Membership {
   household: string;
   role: "owner" | "member";
   pin?: string;
+  permissions?: Permissions;
   expand?: { household?: Household; user?: User };
 }
 
@@ -43,6 +63,7 @@ export interface CachedMember {
   email: string;
   role: string;
   hasPin: boolean;
+  permissions?: Permissions;
 }
 
 export interface Chore {
@@ -56,6 +77,7 @@ export interface Chore {
   due_date?: string;
   completed: boolean;
   points: number;
+  deadline_time?: string; // HH:MM, e.g. "20:00" — must complete by this time for full points
   expand?: { assignee?: User };
 }
 

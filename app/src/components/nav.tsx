@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/context/auth";
+import { useAuth, usePermission } from "@/context/auth";
+import type { Permissions } from "@/lib/pocketbase";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -24,21 +25,38 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Today", icon: Home },
-  { href: "/chores", label: "Chores", icon: ListChecks },
-  { href: "/meals", label: "Meal Planner", icon: UtensilsCrossed },
-  { href: "/shopping", label: "Shopping List", icon: ShoppingCart },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/rewards", label: "Rewards", icon: Trophy },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/",         label: "Today",         icon: Home,          emoji: "🏠" },
+  { href: "/chores",   label: "Chores",         icon: ListChecks,    emoji: "✅" },
+  { href: "/meals",    label: "Meal Planner",   icon: UtensilsCrossed, emoji: "🍽️" },
+  { href: "/shopping", label: "Shopping List",  icon: ShoppingCart,  emoji: "🛒" },
+  { href: "/calendar", label: "Calendar",       icon: CalendarDays,  emoji: "📅" },
+  { href: "/rewards",  label: "Rewards",        icon: Trophy,        emoji: "🏆" },
+  { href: "/settings", label: "Settings",       icon: Settings,      emoji: "⚙️" },
 ];
 
-const mobileNav = navItems.slice(0, 5); // Today, Chores, Shopping, Meals, Calendar
+const mobileNav = navItems.slice(0, 5);
+
+// Maps nav href to the permissions key it requires (undefined = always visible)
+const PAGE_PERMISSION_KEY: Record<string, keyof Permissions | undefined> = {
+  "/chores":   "chores",
+  "/meals":    "meals",
+  "/shopping": "shopping",
+  "/calendar": "calendar",
+  "/rewards":  "rewards",
+};
 
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, membership, logout } = useAuth();
+
+  function canSee(href: string): boolean {
+    const key = PAGE_PERMISSION_KEY[href];
+    if (!key) return true; // no restriction (home, settings)
+    if (membership?.role === "owner") return true;
+    const perm = membership?.permissions?.[key] ?? "read";
+    return perm !== "none";
+  }
 
   const initials = (user?.name as string | undefined)
     ?.split(" ")
@@ -50,15 +68,17 @@ export function Nav() {
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-56 shrink-0 border-r bg-white overflow-y-auto">
+      <aside className="hidden md:flex flex-col w-60 shrink-0 overflow-y-auto"
+        style={{ background: "linear-gradient(175deg, #7c3aed 0%, #4f46e5 100%)" }}>
+
         {/* Logo */}
-        <div className="px-5 py-5 border-b">
-          <span className="font-extrabold text-lg tracking-tight text-primary">Planner</span>
+        <div className="px-5 pt-6 pb-4">
+          <span className="font-black text-xl tracking-tight text-white">✨ Planner</span>
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
-          {navItems.map((item) => {
+        <nav className="flex-1 px-3 py-2 flex flex-col gap-1">
+          {navItems.filter((item) => canSee(item.href)).map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             return (
@@ -66,13 +86,13 @@ export function Nav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    ? "bg-white text-violet-700 shadow-sm"
+                    : "text-violet-100 hover:text-white hover:bg-white/15"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <span className="text-base leading-none">{item.emoji}</span>
                 {item.label}
               </Link>
             );
@@ -80,19 +100,19 @@ export function Nav() {
         </nav>
 
         {/* User section */}
-        <div className="border-t px-3 py-4 flex flex-col gap-1">
+        <div className="px-3 py-4 mt-2 border-t border-white/20 flex flex-col gap-1">
           <div className="flex items-center gap-3 px-3 py-2">
-            <Avatar className="h-7 w-7 shrink-0">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            <Avatar className="h-8 w-8 shrink-0 ring-2 ring-white/40">
+              <AvatarFallback className="text-xs bg-white/20 text-white font-bold">{initials}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold truncate">{user?.name as string}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{membership?.expand?.household?.name}</p>
+              <p className="text-sm font-bold text-white truncate">{user?.name as string}</p>
+              <p className="text-[11px] text-violet-200 truncate">{membership?.expand?.household?.name}</p>
             </div>
           </div>
           <button
             onClick={logout}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors w-full text-left"
+            className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-violet-200 hover:text-white hover:bg-white/15 transition-colors w-full text-left font-medium"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             Sign out
@@ -101,17 +121,20 @@ export function Nav() {
       </aside>
 
       {/* ── Mobile top bar ──────────────────────────────── */}
-      <header className="md:hidden flex items-center justify-between px-4 h-12 bg-white border-b sticky top-0 z-40">
-        <span className="font-extrabold text-base tracking-tight text-primary">Planner</span>
+      <header
+        className="md:hidden flex items-center justify-between px-4 h-13 sticky top-0 z-40"
+        style={{ background: "linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)" }}
+      >
+        <span className="font-black text-base tracking-tight text-white">✨ Planner</span>
         <DropdownMenu>
-          <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 ring-ring cursor-pointer">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 ring-white/60 cursor-pointer">
+            <Avatar className="h-8 w-8 ring-2 ring-white/40">
+              <AvatarFallback className="text-xs bg-white/25 text-white font-bold">{initials}</AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <div className="px-2 py-1.5 text-sm">
-              <p className="font-medium">{user?.name as string}</p>
+              <p className="font-bold">{user?.name as string}</p>
               <p className="text-muted-foreground text-xs truncate">{user?.email as string}</p>
             </div>
             <DropdownMenuSeparator />
@@ -123,7 +146,7 @@ export function Nav() {
               </>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive">
+            <DropdownMenuItem onClick={logout} className="text-destructive font-medium">
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -131,20 +154,19 @@ export function Nav() {
       </header>
 
       {/* ── Mobile bottom tab bar ───────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t flex">
-        {mobileNav.map((item) => {
-          const Icon = item.icon;
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t flex shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
+        {mobileNav.filter((item) => canSee(item.href)).map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] transition-colors",
-                active ? "text-primary" : "text-muted-foreground"
+                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold transition-colors",
+                active ? "text-violet-600" : "text-muted-foreground"
               )}
             >
-              <Icon className={cn("h-5 w-5", active ? "stroke-primary" : "stroke-muted-foreground")} />
+              <span className={cn("text-xl leading-none", !active && "grayscale opacity-60")}>{item.emoji}</span>
               {item.label}
             </Link>
           );

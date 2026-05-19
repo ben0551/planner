@@ -1,7 +1,7 @@
 services:
   pocketbase:
     image: ghcr.io/muchobien/pocketbase:latest
-    container_name: homebase-pb
+    container_name: planner-pb
     restart: unless-stopped
     ports:
       - "8090:8090"
@@ -12,3 +12,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  app:
+    image: ghcr.io/ben0551/planner/planner-app:latest
+    container_name: planner-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL:-http://localhost:8090}
+    depends_on:
+      pocketbase:
+        condition: service_healthy
