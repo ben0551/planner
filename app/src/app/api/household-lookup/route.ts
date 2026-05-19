@@ -27,23 +27,41 @@ export async function GET(req: NextRequest) {
   const results = await Promise.all(
     households.map(async (h: any) => {
       const msRes = await fetch(
-        `${PB_URL}/api/collections/memberships/records?filter=${encodeURIComponent(`household="${h.id}"`)}&expand=user&perPage=50`,
+        `${PB_URL}/api/collections/memberships/records?filter=${encodeURIComponent(`household="${h.id}"`)}&perPage=50`,
         { headers: { Authorization: token } }
       );
       if (!msRes.ok) return null;
       const { items: ms } = await msRes.json();
-      const members = (ms ?? [])
-        .filter((m: any) => m.pin && String(m.pin).length === 4)
-        .map((m: any) => ({
+
+      const pinMembers = (ms ?? []).filter((m: any) => m.pin && String(m.pin).length === 4);
+      if (pinMembers.length === 0) return { id: h.id, name: h.name as string, members: [] };
+
+      // Fetch users directly with admin token — avoids viewRule restrictions on expand
+      const userIds = pinMembers.map((m: any) => m.user).filter(Boolean);
+      const usersFilter = userIds.map((id: string) => `id="${id}"`).join("||");
+      const usersRes = await fetch(
+        `${PB_URL}/api/collections/users/records?filter=${encodeURIComponent(usersFilter)}&perPage=50`,
+        { headers: { Authorization: token } }
+      );
+      const usersById: Record<string, any> = {};
+      if (usersRes.ok) {
+        const { items: users } = await usersRes.json();
+        for (const u of users ?? []) usersById[u.id] = u;
+      }
+
+      const members = pinMembers.map((m: any) => {
+        const u = usersById[m.user];
+        return {
           membershipId: m.id,
-          userId: m.expand?.user?.id ?? m.user,
-          name: (m.expand?.user?.name as string) ?? "Unknown",
-          email: (m.expand?.user?.email as string) ?? "",
+          userId: m.user,
+          name: (u?.name as string) || "Member",
+          email: (u?.email as string) ?? "",
           role: m.role as string,
           hasPin: true,
           permissions: m.permissions ?? {},
           theme: m.theme as string | undefined,
-        }));
+        };
+      });
       return { id: h.id, name: h.name as string, members };
     })
   );

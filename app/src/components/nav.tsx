@@ -23,6 +23,7 @@ import {
   Settings,
   LogOut,
   Trophy,
+  ClipboardList,
 } from "lucide-react";
 
 const navItems = [
@@ -31,11 +32,12 @@ const navItems = [
   { href: "/meals",    label: "Meal Planner",   icon: UtensilsCrossed, emoji: "🍽️" },
   { href: "/shopping", label: "Shopping List",  icon: ShoppingCart,  emoji: "🛒" },
   { href: "/calendar", label: "Calendar",       icon: CalendarDays,  emoji: "📅" },
+  { href: "/tasks",    label: "Tasks",          icon: ClipboardList, emoji: "📋" },
   { href: "/rewards",  label: "Rewards",        icon: Trophy,        emoji: "🏆" },
   { href: "/settings", label: "Settings",       icon: Settings,      emoji: "⚙️" },
 ];
 
-const mobileNav = navItems.slice(0, 5);
+const mobileNav = navItems.slice(0, 6);
 
 // Maps nav href to the permissions key it requires (undefined = always visible)
 const PAGE_PERMISSION_KEY: Record<string, keyof Permissions | undefined> = {

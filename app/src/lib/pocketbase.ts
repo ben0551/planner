@@ -149,3 +149,15 @@ export interface CalendarEvent {
   external_id?: string;
   notes?: string;
 }
+
+export interface Task {
+  id: string;
+  household: string;
+  title: string;
+  due_date: string; // YYYY-MM-DD
+  notes?: string;
+  completed: boolean;
+  assigned_to?: string;
+  created_by?: string;
+  expand?: { assigned_to?: User; created_by?: User };
+}

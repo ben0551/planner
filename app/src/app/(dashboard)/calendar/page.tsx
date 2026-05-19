@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type CalendarEvent } from "@/lib/pocketbase";
+import { getClient, type CalendarEvent, type Task } from "@/lib/pocketbase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +23,20 @@ function firstWeekdayOfMonth(year: number, month: number): number {
   return day === 0 ? 6 : day - 1; // shift so Mon = 0
 }
 
+type FormMode = "event" | "task";
+
 export default function CalendarPage() {
-  const { householdId } = useAuth();
+  const { householdId, user, membership } = useAuth();
   const pb = getClient();
+  const isOwner = membership?.role === "owner";
+  const userId = user?.id ?? "";
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>("event");
   const [title, setTitle] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -50,6 +56,12 @@ export default function CalendarPage() {
         filter: `household="${householdId}" && start >= "${from}" && start <= "${to}T23:59:59"`,
       })
       .then((items) => setEvents(items as unknown as CalendarEvent[]));
+    pb.collection("tasks")
+      .getFullList({
+        filter: `household="${householdId}" && due_date >= "${from}" && due_date <= "${to}"`,
+        sort: "due_date",
+      })
+      .then((items) => setTasks(items as unknown as Task[]));
   }
 
   useEffect(() => {
@@ -134,6 +146,31 @@ export default function CalendarPage() {
     }
   }
 
+  async function addTask() {
+    if (!title.trim() || !start || !householdId) return;
+    setLoading(true);
+    try {
+      const rec = await pb.collection("tasks").create({
+        household: householdId,
+        title: title.trim(),
+        due_date: start,
+        notes: notes.trim() || undefined,
+        created_by: userId,
+        completed: false,
+      });
+      setTasks((prev) => [...prev, rec as unknown as Task]);
+      setTitle(""); setStart(""); setNotes("");
+      setShowForm(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleTask(t: Task) {
+    await pb.collection("tasks").update(t.id, { completed: !t.completed });
+    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, completed: !t.completed } : x)));
+  }
+
   async function deleteEvent(id: string) {
     const ev = events.find((e) => e.id === id);
     await pb.collection("calendar_events").delete(id);
@@ -151,6 +188,16 @@ export default function CalendarPage() {
   function getEventsForDay(day: number): CalendarEvent[] {
     const prefix = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return events.filter((e) => e.start.startsWith(prefix));
+  }
+
+  function getTasksForDay(day: number): Task[] {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return tasks.filter((t) => {
+      if (t.due_date !== dateStr) return false;
+      if (isOwner) return true;
+      if (!t.assigned_to) return true;
+      return t.assigned_to === userId || t.created_by === userId;
+    });
   }
 
   const totalDays = daysInMonth(year, month);
@@ -189,7 +236,7 @@ export default function CalendarPage() {
             variant={showForm ? "secondary" : "default"}
             onClick={() => setShowForm((v) => !v)}
           >
-            {showForm ? "Cancel" : "+ Add event"}
+            {showForm ? "Cancel" : "+ Add"}
           </Button>
         </div>
       </div>
@@ -197,48 +244,79 @@ export default function CalendarPage() {
       {showForm && (
         <Card>
           <CardContent className="pt-4 flex flex-col gap-3">
+            {/* Mode toggle */}
+            <div className="flex gap-1 bg-muted/50 rounded-lg p-1 self-start">
+              {(["event", "task"] as FormMode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setFormMode(m); setTitle(""); setStart(""); setEnd(""); setNotes(""); setAllDay(true); }}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors ${
+                    formMode === m ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m === "event" ? "📅 Event" : "📋 Task"}
+                </button>
+              ))}
+            </div>
+
             <div className="flex flex-col gap-1">
               <Label htmlFor="ev-title">Title</Label>
               <Input
                 id="ev-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. School pickup"
+                placeholder={formMode === "task" ? "e.g. Book dentist" : "e.g. School pickup"}
                 autoFocus
               />
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="ev-allday"
-                checked={allDay}
-                onChange={(e) => setAllDay(e.target.checked)}
-                className="h-4 w-4 accent-primary"
-              />
-              <Label htmlFor="ev-allday">All day</Label>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {formMode === "event" ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="ev-allday"
+                    checked={allDay}
+                    onChange={(e) => setAllDay(e.target.checked)}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <Label htmlFor="ev-allday">All day</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="ev-start">Start</Label>
+                    <Input
+                      id="ev-start"
+                      type={allDay ? "date" : "datetime-local"}
+                      value={start}
+                      onChange={(e) => setStart(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="ev-end">End (optional)</Label>
+                    <Input
+                      id="ev-end"
+                      type={allDay ? "date" : "datetime-local"}
+                      value={end}
+                      onChange={(e) => setEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
               <div className="flex flex-col gap-1">
-                <Label htmlFor="ev-start">Start</Label>
+                <Label htmlFor="task-due">Due date</Label>
                 <Input
-                  id="ev-start"
-                  type={allDay ? "date" : "datetime-local"}
+                  id="task-due"
+                  type="date"
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="ev-end">End (optional)</Label>
-                <Input
-                  id="ev-end"
-                  type={allDay ? "date" : "datetime-local"}
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
-              </div>
-            </div>
+            )}
+
             <div className="flex flex-col gap-1">
-              <Label htmlFor="ev-notes">Notes</Label>
+              <Label htmlFor="ev-notes">Notes (optional)</Label>
               <Input
                 id="ev-notes"
                 value={notes}
@@ -246,8 +324,11 @@ export default function CalendarPage() {
                 placeholder="Optional"
               />
             </div>
-            <Button onClick={addEvent} disabled={loading || !title.trim() || !start}>
-              Add event
+            <Button
+              onClick={formMode === "event" ? addEvent : addTask}
+              disabled={loading || !title.trim() || !start}
+            >
+              {formMode === "event" ? "Add event" : "Add task"}
             </Button>
           </CardContent>
         </Card>
@@ -265,6 +346,7 @@ export default function CalendarPage() {
             today.getMonth() === month &&
             today.getDate() === day;
           const dayEvents = getEventsForDay(day);
+          const dayTasks = getTasksForDay(day);
 
           return (
             <div
@@ -288,6 +370,23 @@ export default function CalendarPage() {
                     ✕
                   </button>
                 </div>
+              ))}
+              {dayTasks.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => toggleTask(t)}
+                  className={`flex items-center gap-0.5 min-w-0 text-left rounded px-1 leading-5 transition-opacity ${
+                    t.completed
+                      ? "bg-amber-50 text-amber-400 opacity-60"
+                      : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                  }`}
+                  title={t.completed ? "Mark incomplete" : "Mark complete"}
+                >
+                  <span className="text-[10px] shrink-0">{t.completed ? "✓" : "○"}</span>
+                  <span className={`text-xs truncate flex-1 ${t.completed ? "line-through" : ""}`}>
+                    {t.title}
+                  </span>
+                </button>
               ))}
             </div>
           );

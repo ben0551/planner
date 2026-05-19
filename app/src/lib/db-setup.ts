@@ -171,6 +171,19 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  await ensureCollection({
+    name: "tasks",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "title", type: "text", required: true },
+      { name: "due_date", type: "text" },
+      { name: "notes", type: "text" },
+      { name: "completed", type: "bool" },
+      { name: "assigned_to", ...rel(PB_USERS_ID) },
+      { name: "created_by", ...rel(PB_USERS_ID) },
+    ],
+  });
+
   // google_tokens: admin-only (no rules set), stores OAuth refresh tokens per household
   await ensureCollection({
     name: "google_tokens",
@@ -231,16 +244,22 @@ export async function ensureSchema(): Promise<string[]> {
   const fresh: Record<string, any> = {};
   for (const c of freshCollections.items ?? []) fresh[c.name] = c;
 
-  // users collection: allow public registration
+  // users collection: allow public registration + allow auth users to view (needed for member name expand)
   const usersCol = fresh["users"] ?? freshCollections.items?.find((c: any) => c.id === "_pb_users_auth_");
-  if (usersCol && usersCol.createRule !== "") {
-    await pbApi(token, `collections/${usersCol.id}`, "PATCH", { createRule: "" });
-    log.push("users: set createRule to public");
+  if (usersCol) {
+    const patch: Record<string, string> = {};
+    if (usersCol.createRule !== "") patch.createRule = "";
+    if (usersCol.viewRule !== '@request.auth.id != ""') patch.viewRule = '@request.auth.id != ""';
+    if (Object.keys(patch).length > 0) {
+      await pbApi(token, `collections/${usersCol.id}`, "PATCH", patch);
+      if (patch.createRule !== undefined) log.push("users: set createRule to public");
+      if (patch.viewRule !== undefined) log.push("users: set viewRule to authenticated");
+    }
   }
 
   // all app collections: allow authenticated users
   const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events"];
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events", "tasks"];
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;
