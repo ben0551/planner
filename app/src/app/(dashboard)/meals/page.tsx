@@ -7,14 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { BookOpen, Plus, Search, ShoppingCart, Check } from "lucide-react";
+import { BookOpen, Plus, Search, ShoppingCart, Check, ExternalLink, ChevronLeft, ChevronRight, Pencil, Trash2, X } from "lucide-react";
 
 type MealType = "breakfast" | "lunch" | "dinner";
+type PageView = "planner" | "library";
 
 const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
   { key: "breakfast", label: "Breakfast", emoji: "🍳" },
   { key: "lunch",     label: "Lunch",     emoji: "🥪" },
   { key: "dinner",    label: "Dinner",    emoji: "🍽️" },
+];
+
+const CATEGORY_SUGGESTIONS = [
+  "Quick", "Healthy", "Veggie", "Pasta", "Soup", "Salad",
+  "Sandwich", "Eggs", "Smoothie", "Toast", "Snack",
 ];
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -37,18 +43,46 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+interface RecipeFormState {
+  name: string;
+  mealType: MealType;
+  category: string;
+  notes: string;
+  ingredients: string;
+  url: string;
+}
+
+const defaultRecipeForm = (): RecipeFormState => ({
+  name: "", mealType: "breakfast", category: "", notes: "", ingredients: "", url: "",
+});
+
+function formFromRecipe(r: MealRecipe): RecipeFormState {
+  return {
+    name: r.name,
+    mealType: r.meal_type,
+    category: r.category ?? "",
+    notes: r.notes ?? "",
+    ingredients: r.ingredients ?? "",
+    url: r.url ?? "",
+  };
+}
+
 interface Editing { date: string; mealType: MealType }
 
 export default function MealsPage() {
   const { householdId } = useAuth();
   const pb = getClient();
+
+  // ── View toggle ──
+  const [view, setView] = useState<PageView>("planner");
+
+  // ── Planner state ──
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [recipes, setRecipes] = useState<MealRecipe[]>([]);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [recipeName, setRecipeName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [ingredients, setIngredients] = useState("");
+  const [mealNotes, setMealNotes] = useState("");
+  const [mealIngredients, setMealIngredients] = useState("");
   const [saveAsRecipe, setSaveAsRecipe] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
@@ -57,6 +91,18 @@ export default function MealsPage() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartAdded, setCartAdded] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // ── Library state ──
+  const [recipes, setRecipes] = useState<MealRecipe[]>([]);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryMealFilter, setLibraryMealFilter] = useState<MealType | "all">("all");
+  const [editingRecipe, setEditingRecipe] = useState<MealRecipe | null>(null);
+  const [showRecipeForm, setShowRecipeForm] = useState(false);
+  const [recipeForm, setRecipeForm] = useState<RecipeFormState>(defaultRecipeForm());
+  const [recipeSaving, setRecipeSaving] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const todayStr = toDateStr(new Date());
@@ -73,6 +119,8 @@ export default function MealsPage() {
       .then((items) => setRecipes(items as unknown as MealRecipe[]));
   }, [householdId, weekStart]);
 
+  // ── Planner helpers ──
+
   function getMeal(dateStr: string, mealType: MealType): Meal | undefined {
     return meals.find((m) => m.date.startsWith(dateStr) && m.meal_type === mealType);
   }
@@ -80,8 +128,8 @@ export default function MealsPage() {
   function openEdit(dateStr: string, mealType: MealType) {
     const meal = getMeal(dateStr, mealType);
     setRecipeName(meal?.recipe_name ?? "");
-    setNotes(meal?.notes ?? "");
-    setIngredients("");
+    setMealNotes(meal?.notes ?? "");
+    setMealIngredients("");
     setSaveAsRecipe(false);
     setRecipeSearch("");
     setShowRecipePicker(false);
@@ -89,18 +137,14 @@ export default function MealsPage() {
   }
 
   function closeEdit() {
-    setEditing(null);
-    setRecipeName("");
-    setNotes("");
-    setIngredients("");
-    setSaveAsRecipe(false);
-    setShowRecipePicker(false);
+    setEditing(null); setRecipeName(""); setMealNotes(""); setMealIngredients("");
+    setSaveAsRecipe(false); setShowRecipePicker(false);
   }
 
   function pickRecipe(recipe: MealRecipe) {
     setRecipeName(recipe.name);
-    setNotes(recipe.notes ?? "");
-    setIngredients(recipe.ingredients ?? "");
+    setMealNotes(recipe.notes ?? "");
+    setMealIngredients(recipe.ingredients ?? "");
     setShowRecipePicker(false);
     setSaveAsRecipe(false);
   }
@@ -112,42 +156,30 @@ export default function MealsPage() {
       const existing = getMeal(editing.date, editing.mealType);
       if (existing) {
         const saved = await pb.collection("meals").update(existing.id, {
-          recipe_name: recipeName.trim(),
-          notes: notes.trim() || undefined,
+          recipe_name: recipeName.trim(), notes: mealNotes.trim() || undefined,
         });
         setMeals((prev) => prev.map((m) => m.id === existing.id ? { ...m, ...saved } as Meal : m));
       } else {
         const saved = await pb.collection("meals").create({
-          household: householdId,
-          date: editing.date,
-          meal_type: editing.mealType,
-          recipe_name: recipeName.trim(),
-          notes: notes.trim() || undefined,
+          household: householdId, date: editing.date, meal_type: editing.mealType,
+          recipe_name: recipeName.trim(), notes: mealNotes.trim() || undefined,
         });
         setMeals((prev) => [...prev, saved as unknown as Meal]);
       }
-
-      // Optionally save to recipe library
       if (saveAsRecipe && recipeName.trim()) {
         const alreadyExists = recipes.some(
           (r) => r.name.toLowerCase() === recipeName.trim().toLowerCase() && r.meal_type === editing.mealType
         );
         if (!alreadyExists) {
           const newRecipe = await pb.collection("meal_recipes").create({
-            household: householdId,
-            name: recipeName.trim(),
-            meal_type: editing.mealType,
-            notes: notes.trim() || undefined,
-            ingredients: ingredients.trim() || undefined,
+            household: householdId, name: recipeName.trim(), meal_type: editing.mealType,
+            notes: mealNotes.trim() || undefined, ingredients: mealIngredients.trim() || undefined,
           });
           setRecipes((prev) => [...prev, newRecipe as unknown as MealRecipe].sort((a, b) => a.name.localeCompare(b.name)));
         }
       }
-
       closeEdit();
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function deleteMeal(id: string) {
@@ -155,49 +187,26 @@ export default function MealsPage() {
     setMeals((prev) => prev.filter((m) => m.id !== id));
   }
 
-  async function deleteRecipe(id: string) {
-    await pb.collection("meal_recipes").delete(id);
-    setRecipes((prev) => prev.filter((r) => r.id !== id));
-  }
-
   function openShoppingPanel() {
-    // Build ingredient list grouped by meal name, deduplicating across meals
     const seen = new Set<string>();
     const items: { ingredient: string; meal: string; selected: boolean }[] = [];
-
-    // Sort meals by date so they appear in week order
     const sorted = [...meals].sort((a, b) => a.date.localeCompare(b.date));
     for (const meal of sorted) {
       const recipe = recipes.find(
         (r) => r.name.toLowerCase() === meal.recipe_name.toLowerCase() && r.meal_type === meal.meal_type
       );
       if (recipe?.ingredients) {
-        const lines = recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean);
-        for (const line of lines) {
+        for (const line of recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean)) {
           const key = line.toLowerCase();
-          if (!seen.has(key)) {
-            seen.add(key);
-            items.push({ ingredient: line, meal: meal.recipe_name, selected: true });
-          }
+          if (!seen.has(key)) { seen.add(key); items.push({ ingredient: line, meal: meal.recipe_name, selected: true }); }
         }
       }
     }
-
     if (items.length === 0) {
-      alert("No ingredients found. Save ingredients to your recipes via the recipe library.");
+      alert("No ingredients found. Add ingredients to recipes in the Recipe Library.");
       return;
     }
     setShoppingPanel(items);
-  }
-
-  function toggleIngredient(index: number) {
-    setShoppingPanel((prev) =>
-      prev ? prev.map((item, i) => i === index ? { ...item, selected: !item.selected } : item) : prev
-    );
-  }
-
-  function toggleAllIngredients(selected: boolean) {
-    setShoppingPanel((prev) => prev ? prev.map((item) => ({ ...item, selected })) : prev);
   }
 
   async function confirmAddToShoppingList() {
@@ -206,52 +215,369 @@ export default function MealsPage() {
     if (chosen.length === 0) return;
     setAddingToCart(true);
     try {
-      await Promise.all(
-        chosen.map((item) =>
-          pb.collection("shopping_items").create({
-            household: householdId,
-            name: item.ingredient,
-            category: "Meals",
-            checked: false,
-          })
-        )
-      );
+      await Promise.all(chosen.map((item) =>
+        pb.collection("shopping_items").create({ household: householdId, name: item.ingredient, category: "Meals", checked: false })
+      ));
       setShoppingPanel(null);
       setCartAdded(true);
       setTimeout(() => setCartAdded(false), 3000);
+    } finally { setAddingToCart(false); }
+  }
+
+  // ── Library helpers ──
+
+  function openAddRecipe(mealType?: MealType) {
+    setRecipeForm({ ...defaultRecipeForm(), mealType: mealType ?? "breakfast" });
+    setEditingRecipe(null);
+    setImportUrl("");
+    setImportError("");
+    setShowRecipeForm(true);
+  }
+
+  function openEditRecipe(recipe: MealRecipe) {
+    setRecipeForm(formFromRecipe(recipe));
+    setEditingRecipe(recipe);
+    setImportUrl("");
+    setImportError("");
+    setShowRecipeForm(true);
+  }
+
+  function closeRecipeForm() {
+    setShowRecipeForm(false);
+    setEditingRecipe(null);
+    setRecipeForm(defaultRecipeForm());
+    setImportUrl("");
+    setImportError("");
+  }
+
+  function setRecipeField<K extends keyof RecipeFormState>(k: K, v: RecipeFormState[K]) {
+    setRecipeForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function tryImportUrl() {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImportLoading(true);
+    setImportError("");
+    try {
+      const res = await fetch(url, { mode: "no-cors" });
+      // no-cors returns opaque response — we can't read it, but we can use the URL's path as a name hint
+      const pathName = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+      const guessedName = pathName.replace(/[-_]/g, " ").replace(/\.\w+$/, "").replace(/\b\w/g, (c) => c.toUpperCase());
+      setRecipeField("name", guessedName || "Imported recipe");
+      setRecipeField("url", url);
+    } catch {
+      // Just save the URL as a reference
+      setRecipeField("url", url);
+      setImportError("Could not auto-import — URL saved as a reference. Fill in details manually.");
     } finally {
-      setAddingToCart(false);
+      setImportLoading(false);
     }
   }
 
-  const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
+  async function saveRecipe() {
+    if (!recipeForm.name.trim() || !householdId) return;
+    setRecipeSaving(true);
+    try {
+      const payload = {
+        household: householdId,
+        name: recipeForm.name.trim(),
+        meal_type: recipeForm.mealType,
+        category: recipeForm.category.trim() || undefined,
+        notes: recipeForm.notes.trim() || undefined,
+        ingredients: recipeForm.ingredients.trim() || undefined,
+        url: recipeForm.url.trim() || undefined,
+      };
+      if (editingRecipe) {
+        await pb.collection("meal_recipes").update(editingRecipe.id, payload);
+        setRecipes((prev) =>
+          prev.map((r) => r.id === editingRecipe.id ? { ...r, ...payload, id: editingRecipe.id } as MealRecipe : r)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+      } else {
+        const saved = await pb.collection("meal_recipes").create(payload);
+        setRecipes((prev) => [...prev, saved as unknown as MealRecipe].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+      closeRecipeForm();
+    } finally { setRecipeSaving(false); }
+  }
 
+  async function deleteRecipe(id: string) {
+    await pb.collection("meal_recipes").delete(id);
+    setRecipes((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  // ── Derived ──
+
+  const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
   const editingMeal = editing ? getMeal(editing.date, editing.mealType) : undefined;
   const editingMealType = MEAL_TYPES.find((t) => t.key === editing?.mealType);
   const editingLabel = editing
     ? `${new Date(editing.date + "T12:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })} · ${editingMealType?.emoji} ${editingMealType?.label}`
     : "";
-
-  const filteredRecipes = recipes.filter(
-    (r) =>
-      (!editing || r.meal_type === editing.mealType) &&
+  const filteredPickerRecipes = recipes.filter(
+    (r) => (!editing || r.meal_type === editing.mealType) &&
       r.name.toLowerCase().includes(recipeSearch.toLowerCase())
   );
+  const filteredLibraryRecipes = recipes.filter(
+    (r) =>
+      (libraryMealFilter === "all" || r.meal_type === libraryMealFilter) &&
+      (r.name.toLowerCase().includes(librarySearch.toLowerCase()) ||
+        (r.category ?? "").toLowerCase().includes(librarySearch.toLowerCase()))
+  );
 
+  // ─────────────────────────────────────────────
+  // Recipe Library view
+  // ─────────────────────────────────────────────
+  if (view === "library") {
+    return (
+      <div className="flex flex-col gap-5">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setView("planner"); setShowRecipeForm(false); }}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" /> Meal Planner
+            </button>
+            <h1 className="text-xl font-black flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-orange-500" /> Recipe Library
+            </h1>
+          </div>
+          <button
+            onClick={() => openAddRecipe()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+          >
+            <Plus className="h-4 w-4" /> Add recipe
+          </button>
+        </div>
+
+        {/* Import from web */}
+        <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-2">
+          <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Import from web</p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Paste a recipe URL…"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!importUrl.trim() || importLoading}
+              onClick={tryImportUrl}
+            >
+              {importLoading ? "…" : "Import"}
+            </Button>
+          </div>
+          {importError && <p className="text-xs text-muted-foreground">{importError}</p>}
+          <p className="text-[11px] text-muted-foreground">Saves the URL as a reference and pre-fills the name. Fill in ingredients manually.</p>
+        </div>
+
+        {/* Add / Edit form */}
+        {showRecipeForm && (
+          <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="font-black text-sm">{editingRecipe ? "Edit recipe" : "New recipe"}</p>
+              <button onClick={closeRecipeForm}><X className="h-4 w-4 text-muted-foreground" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Recipe name</Label>
+                <Input value={recipeForm.name} onChange={(e) => setRecipeField("name", e.target.value)}
+                  placeholder="e.g. Avo toast" autoFocus />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Meal type</Label>
+                <select value={recipeForm.mealType} onChange={(e) => setRecipeField("mealType", e.target.value as MealType)}
+                  className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                  {MEAL_TYPES.map((mt) => (
+                    <option key={mt.key} value={mt.key}>{mt.emoji} {mt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Category</Label>
+              <div className="flex flex-col gap-1.5">
+                <Input value={recipeForm.category} onChange={(e) => setRecipeField("category", e.target.value)}
+                  placeholder="e.g. Quick, Healthy, Pasta…" />
+                <div className="flex flex-wrap gap-1">
+                  {CATEGORY_SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setRecipeField("category", s)}
+                      className={cn(
+                        "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
+                        recipeForm.category === s
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                      )}
+                    >{s}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Ingredients (one per line)</Label>
+              <textarea
+                value={recipeForm.ingredients}
+                onChange={(e) => setRecipeField("ingredients", e.target.value)}
+                placeholder={"2 slices sourdough\n1 avocado\nLemon juice\nSalt & pepper"}
+                rows={4}
+                className="rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Notes</Label>
+              <Input value={recipeForm.notes} onChange={(e) => setRecipeField("notes", e.target.value)}
+                placeholder="e.g. Double for 4 people" />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Source URL (optional)</Label>
+              <Input value={recipeForm.url} onChange={(e) => setRecipeField("url", e.target.value)}
+                placeholder="https://…" type="url" />
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={saveRecipe} disabled={recipeSaving || !recipeForm.name.trim()} className="rounded-xl font-bold">
+                {recipeSaving ? "Saving…" : editingRecipe ? "Save changes" : "Add recipe"}
+              </Button>
+              <Button variant="ghost" onClick={closeRecipeForm} className="rounded-xl">Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Search + filter */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-2 rounded-xl border border-input bg-white px-3 py-2 flex-1 min-w-40">
+            <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)}
+              placeholder="Search recipes…" className="flex-1 text-sm outline-none bg-transparent" />
+          </div>
+          <div className="flex gap-1">
+            {([{ key: "all", label: "All" }, ...MEAL_TYPES.map((m) => ({ key: m.key, label: m.emoji }))] as { key: string; label: string }[]).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setLibraryMealFilter(f.key as MealType | "all")}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-sm font-bold transition-colors",
+                  libraryMealFilter === f.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white border border-border text-muted-foreground hover:bg-muted/50"
+                )}
+              >{f.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Recipe cards grouped by meal type */}
+        {filteredLibraryRecipes.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-10 text-center text-sm text-muted-foreground">
+            {recipes.length === 0 ? "No recipes yet — add one above! 🍽️" : "No recipes match your search."}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {MEAL_TYPES.map((mt) => {
+              const group = filteredLibraryRecipes.filter((r) => r.meal_type === mt.key);
+              if (group.length === 0) return null;
+              return (
+                <div key={mt.key}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{mt.emoji}</span>
+                    <h2 className="font-black text-sm">{mt.label}</h2>
+                    <button
+                      onClick={() => openAddRecipe(mt.key)}
+                      className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Add
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {group.map((recipe) => (
+                      <div key={recipe.id} className="rounded-2xl bg-white border border-border shadow-sm p-3.5 flex gap-3">
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-black text-sm">{recipe.name}</p>
+                            {recipe.category && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold">
+                                {recipe.category}
+                              </span>
+                            )}
+                            {recipe.url && (
+                              <a href={recipe.url} target="_blank" rel="noopener noreferrer"
+                                className="text-muted-foreground hover:text-primary transition-colors"
+                                onClick={(e) => e.stopPropagation()}>
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                          {recipe.notes && (
+                            <p className="text-xs text-muted-foreground">{recipe.notes}</p>
+                          )}
+                          {recipe.ingredients && (
+                            <p className="text-[11px] text-muted-foreground/70 leading-relaxed line-clamp-2">
+                              {recipe.ingredients.split("\n").filter(Boolean).join(", ")}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button onClick={() => openEditRecipe(recipe)}
+                            className="p-1.5 rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deleteRecipe(recipe.id)}
+                            className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // Meal Planner view
+  // ─────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-xl font-bold">Meal Planner</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => { setView("library"); setShowRecipeForm(false); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-100 text-orange-700 text-xs font-bold hover:bg-orange-200 transition-colors"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Recipe Library
+            {recipes.length > 0 && (
+              <span className="bg-orange-200 text-orange-800 rounded-full px-1.5 text-[10px]">{recipes.length}</span>
+            )}
+          </button>
           {meals.length > 0 && (
             <button
               onClick={openShoppingPanel}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors",
                 cartAdded
                   ? "bg-emerald-100 text-emerald-700"
-                  : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
               {cartAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
@@ -259,14 +585,18 @@ export default function MealsPage() {
             </button>
           )}
           <div className="flex items-center gap-1 text-sm">
-            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>←</Button>
+            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
             <span className="hidden sm:inline w-44 text-center text-muted-foreground text-xs">{weekLabel}</span>
-            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>→</Button>
+            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* ── Ingredient selection panel ── */}
+      {/* Ingredient selection panel */}
       {shoppingPanel && (
         <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b flex items-center justify-between">
@@ -275,53 +605,30 @@ export default function MealsPage() {
               <h2 className="font-bold text-sm">Add to shopping list</h2>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => toggleAllIngredients(true)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                All
-              </button>
-              <button
-                onClick={() => toggleAllIngredients(false)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                None
-              </button>
-              <button onClick={() => setShoppingPanel(null)} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
+              <button onClick={() => setShoppingPanel((p) => p?.map((i) => ({ ...i, selected: true })) ?? null)}
+                className="text-xs text-muted-foreground hover:text-foreground">All</button>
+              <button onClick={() => setShoppingPanel((p) => p?.map((i) => ({ ...i, selected: false })) ?? null)}
+                className="text-xs text-muted-foreground hover:text-foreground">None</button>
+              <button onClick={() => setShoppingPanel(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
             </div>
           </div>
-
           <div className="divide-y max-h-72 overflow-y-auto">
             {shoppingPanel.map((item, i) => (
-              <label
-                key={i}
-                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={item.selected}
-                  onChange={() => toggleIngredient(i)}
-                  className="h-4 w-4 rounded accent-primary shrink-0"
-                />
-                <span className={cn("flex-1 text-sm", !item.selected && "text-muted-foreground line-through")}>
-                  {item.ingredient}
-                </span>
+              <label key={i} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors">
+                <input type="checkbox" checked={item.selected}
+                  onChange={() => setShoppingPanel((p) => p?.map((it, j) => j === i ? { ...it, selected: !it.selected } : it) ?? null)}
+                  className="h-4 w-4 rounded accent-primary shrink-0" />
+                <span className={cn("flex-1 text-sm", !item.selected && "text-muted-foreground line-through")}>{item.ingredient}</span>
                 <span className="text-xs text-muted-foreground shrink-0">{item.meal}</span>
               </label>
             ))}
           </div>
-
           <div className="px-4 py-3 border-t flex items-center gap-3">
-            <Button
-              size="sm"
-              onClick={confirmAddToShoppingList}
-              disabled={addingToCart || shoppingPanel.every((i) => !i.selected)}
-            >
+            <Button size="sm" onClick={confirmAddToShoppingList}
+              disabled={addingToCart || shoppingPanel.every((i) => !i.selected)}>
               {addingToCart ? "Adding…" : `Add ${shoppingPanel.filter((i) => i.selected).length} item${shoppingPanel.filter((i) => i.selected).length === 1 ? "" : "s"}`}
             </Button>
-            <button onClick={() => setShoppingPanel(null)} className="text-sm text-muted-foreground hover:text-foreground">
-              Cancel
-            </button>
+            <button onClick={() => setShoppingPanel(null)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}
@@ -352,8 +659,7 @@ export default function MealsPage() {
               const meal = getMeal(ds, mt.key);
               const isToday = ds === todayStr;
               return (
-                <div
-                  key={ds}
+                <div key={ds}
                   onClick={() => openEdit(ds, mt.key)}
                   className={cn(
                     "min-h-16 p-2 border-l cursor-pointer hover:bg-muted/30 transition-colors group",
@@ -397,8 +703,7 @@ export default function MealsPage() {
                 {MEAL_TYPES.map((mt) => {
                   const meal = getMeal(ds, mt.key);
                   return (
-                    <div
-                      key={mt.key}
+                    <div key={mt.key}
                       onClick={() => openEdit(ds, mt.key)}
                       className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group"
                     >
@@ -414,10 +719,8 @@ export default function MealsPage() {
                         )}
                       </div>
                       {meal && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
-                          className="text-muted-foreground hover:text-destructive text-xs opacity-0 group-hover:opacity-100 shrink-0"
-                        >✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
+                          className="text-muted-foreground hover:text-destructive text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
                       )}
                     </div>
                   );
@@ -428,60 +731,46 @@ export default function MealsPage() {
         })}
       </div>
 
-      {/* ── Edit form ── */}
+      {/* ── Edit meal form ── */}
       {editing && (
         <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">{editingLabel}</p>
-            <button onClick={closeEdit} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+            <button onClick={closeEdit}><X className="h-4 w-4 text-muted-foreground" /></button>
           </div>
 
-          {/* For breakfast/lunch: show recipe card grid first if options exist */}
-          {editing.mealType !== "dinner" && filteredRecipes.length > 0 && (
+          {editing.mealType !== "dinner" && filteredPickerRecipes.length > 0 && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs text-muted-foreground">Choose from saved options</Label>
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => { setRecipeSearch(""); setShowRecipePicker((v) => !v); }}
-                  className="text-xs text-orange-500 font-medium hover:underline"
-                >
+                  className="text-xs text-orange-500 font-medium hover:underline">
                   {showRecipePicker ? "Hide" : "Search"}
                 </button>
               </div>
               {showRecipePicker && (
                 <div className="flex items-center gap-2 rounded-lg border border-input px-3 py-2">
                   <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <input
-                    ref={searchRef}
-                    value={recipeSearch}
-                    onChange={(e) => setRecipeSearch(e.target.value)}
-                    placeholder="Filter…"
-                    className="flex-1 text-sm outline-none bg-transparent"
-                  />
+                  <input ref={searchRef} value={recipeSearch} onChange={(e) => setRecipeSearch(e.target.value)}
+                    placeholder="Filter…" className="flex-1 text-sm outline-none bg-transparent" />
                 </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {filteredRecipes.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => pickRecipe(r)}
+                {filteredPickerRecipes.map((r) => (
+                  <button key={r.id} type="button" onClick={() => pickRecipe(r)}
                     className={cn(
                       "rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-primary/5",
                       recipeName === r.name ? "border-primary bg-primary/5" : "border-border bg-muted/30"
-                    )}
-                  >
+                    )}>
                     <p className="text-sm font-medium leading-tight">{r.name}</p>
+                    {r.category && <p className="text-[10px] text-primary/70 font-medium mt-0.5">{r.category}</p>}
                     {r.notes && <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{r.notes}</p>}
                   </button>
                 ))}
-                {/* Custom option */}
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => { setRecipeName(""); setShowRecipePicker(false); setTimeout(() => document.getElementById("meal-name-input")?.focus(), 50); }}
-                  className="rounded-xl border border-dashed border-muted-foreground/40 px-3 py-2.5 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors flex items-center gap-1"
-                >
+                  className="rounded-xl border border-dashed border-muted-foreground/40 px-3 py-2.5 text-left text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Something else
                 </button>
               </div>
@@ -491,54 +780,28 @@ export default function MealsPage() {
             </div>
           )}
 
-          {/* For dinner or when no saved recipes: just the text input */}
-          {(editing.mealType === "dinner" || filteredRecipes.length === 0) && (
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground shrink-0">Meal</Label>
-              {editing.mealType !== "dinner" && filteredRecipes.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">(add to recipe library to show picker next time)</span>
-              )}
-            </div>
-          )}
-
-          <Input
-            id="meal-name-input"
-            value={recipeName}
-            onChange={(e) => setRecipeName(e.target.value)}
+          <Input id="meal-name-input" value={recipeName} onChange={(e) => setRecipeName(e.target.value)}
             placeholder={editing.mealType === "dinner" ? "e.g. Pasta bolognese" : "e.g. Vegemite toast"}
-            autoFocus={editing.mealType === "dinner" || filteredRecipes.length === 0}
-            onKeyDown={(e) => { if (e.key === "Enter") saveMeal(); if (e.key === "Escape") closeEdit(); }}
-          />
+            autoFocus={editing.mealType === "dinner" || filteredPickerRecipes.length === 0}
+            onKeyDown={(e) => { if (e.key === "Enter") saveMeal(); if (e.key === "Escape") closeEdit(); }} />
 
           <div className="flex flex-col gap-1">
             <Label className="text-xs">Notes</Label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Double the recipe"
-            />
+            <Input value={mealNotes} onChange={(e) => setMealNotes(e.target.value)} placeholder="e.g. Double the recipe" />
           </div>
 
           {saveAsRecipe && (
             <div className="flex flex-col gap-1">
-              <Label className="text-xs">Ingredients (optional, one per line)</Label>
-              <textarea
-                value={ingredients}
-                onChange={(e) => setIngredients(e.target.value)}
-                placeholder={"2 eggs\n1 slice sourdough\nButter"}
-                rows={3}
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-              />
+              <Label className="text-xs">Ingredients (one per line)</Label>
+              <textarea value={mealIngredients} onChange={(e) => setMealIngredients(e.target.value)}
+                placeholder={"2 eggs\n1 slice sourdough\nButter"} rows={3}
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" />
             </div>
           )}
 
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={saveAsRecipe}
-              onChange={(e) => setSaveAsRecipe(e.target.checked)}
-              className="rounded accent-primary"
-            />
+            <input type="checkbox" checked={saveAsRecipe} onChange={(e) => setSaveAsRecipe(e.target.checked)}
+              className="rounded accent-primary" />
             <span className="text-xs text-muted-foreground">Save to recipe library for next time</span>
           </label>
 
@@ -548,39 +811,11 @@ export default function MealsPage() {
             </Button>
             <Button variant="ghost" onClick={closeEdit}>Cancel</Button>
             {editingMeal && (
-              <Button variant="ghost" className="text-destructive ml-auto" onClick={() => { deleteMeal(editingMeal.id); closeEdit(); }}>
+              <Button variant="ghost" className="text-destructive ml-auto"
+                onClick={() => { deleteMeal(editingMeal.id); closeEdit(); }}>
                 Delete
               </Button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Recipe library ── */}
-      {recipes.length > 0 && !editing && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-1 border-b flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-orange-500" />
-            <h2 className="font-bold text-sm">Recipe Library</h2>
-          </div>
-          <div className="divide-y">
-            {MEAL_TYPES.map((mt) => {
-              const group = recipes.filter((r) => r.meal_type === mt.key);
-              if (group.length === 0) return null;
-              return (
-                <div key={mt.key} className="px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">{mt.emoji} {mt.label}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {group.map((r) => (
-                      <div key={r.id} className="flex items-center gap-1 bg-muted/60 rounded-full px-3 py-1 text-xs">
-                        <span>{r.name}</span>
-                        <button onClick={() => deleteRecipe(r.id)} className="text-muted-foreground hover:text-destructive ml-1">×</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}

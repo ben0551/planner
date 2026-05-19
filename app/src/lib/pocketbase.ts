@@ -123,8 +123,10 @@ export interface MealRecipe {
   household: string;
   name: string;
   meal_type: "breakfast" | "lunch" | "dinner";
+  category?: string;
   notes?: string;
   ingredients?: string;
+  url?: string;
 }
 
 export interface CalendarEvent {

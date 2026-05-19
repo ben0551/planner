@@ -18,10 +18,6 @@ function childEmail(name: string, householdId: string) {
   return `${name.toLowerCase().replace(/\s+/g, "-")}-${householdId}@planner.local`;
 }
 
-function childPassword(householdId: string, pin: string) {
-  return `planner-${householdId}-${pin}`;
-}
-
 function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }

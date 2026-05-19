@@ -83,6 +83,23 @@ async function main() {
     }
   }
 
+  // ── meal_recipes: add category and url fields ──
+  {
+    const col = await getCollection("meal_recipes");
+    if (!col) { console.error("Collection 'meal_recipes' not found."); }
+    else {
+      const schema = col.fields ?? col.schema ?? [];
+      for (const field of [{ name: "category", type: "text" }, { name: "url", type: "url" }]) {
+        const needs = await addFieldIfMissing(col.id, schema, field);
+        if (needs) {
+          const updated = [...schema, field];
+          await api(`collections/${col.id}`, "PATCH", { fields: updated });
+          console.log(`meal_recipes: added '${field.name}' field.`);
+        }
+      }
+    }
+  }
+
   console.log("\nMigration complete.");
 }
 
