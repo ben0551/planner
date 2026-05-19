@@ -1,12 +1,16 @@
 import PocketBase from "pocketbase";
 
-const url = process.env.NEXT_PUBLIC_POCKETBASE_URL ?? "http://localhost:8090";
-
 // Singleton for client-side usage
 let pb: PocketBase;
 
 export function getClient(): PocketBase {
   if (!pb) {
+    // Proxy through Next.js (/pb/* rewrite in next.config.ts) so the app works
+    // on any host without baking a URL into the build.
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/pb`
+        : (process.env.PB_INTERNAL_URL ?? "http://localhost:8090");
     pb = new PocketBase(url);
     pb.autoCancellation(false);
   }

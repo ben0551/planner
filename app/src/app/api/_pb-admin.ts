@@ -1,4 +1,4 @@
-const PB_URL = process.env.NEXT_PUBLIC_POCKETBASE_URL ?? "http://localhost:8090";
+const PB_URL = process.env.PB_INTERNAL_URL ?? "http://localhost:8090";
 
 export { PB_URL };
 
