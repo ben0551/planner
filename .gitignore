@@ -1,0 +1,10 @@
+pb/pb_data/
+.env
+.env.local
+app/.env.local
+app/node_modules/
+app/.next/
+node_modules/
+.next/
+Thumbs.db
+.DS_Store
