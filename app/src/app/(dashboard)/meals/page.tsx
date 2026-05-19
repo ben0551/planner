@@ -53,6 +53,7 @@ export default function MealsPage() {
   const [saving, setSaving] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [showRecipePicker, setShowRecipePicker] = useState(false);
+  const [shoppingPanel, setShoppingPanel] = useState<{ ingredient: string; meal: string; selected: boolean }[] | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartAdded, setCartAdded] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -159,40 +160,63 @@ export default function MealsPage() {
     setRecipes((prev) => prev.filter((r) => r.id !== id));
   }
 
-  async function addWeekToShoppingList() {
-    if (!householdId) return;
-    setAddingToCart(true);
-    try {
-      // Collect all ingredients from recipes that match meals planned this week
-      const ingredientLines: string[] = [];
-      for (const meal of meals) {
-        const recipe = recipes.find(
-          (r) => r.name.toLowerCase() === meal.recipe_name.toLowerCase() && r.meal_type === meal.meal_type
-        );
-        if (recipe?.ingredients) {
-          const lines = recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean);
-          ingredientLines.push(...lines);
+  function openShoppingPanel() {
+    // Build ingredient list grouped by meal name, deduplicating across meals
+    const seen = new Set<string>();
+    const items: { ingredient: string; meal: string; selected: boolean }[] = [];
+
+    // Sort meals by date so they appear in week order
+    const sorted = [...meals].sort((a, b) => a.date.localeCompare(b.date));
+    for (const meal of sorted) {
+      const recipe = recipes.find(
+        (r) => r.name.toLowerCase() === meal.recipe_name.toLowerCase() && r.meal_type === meal.meal_type
+      );
+      if (recipe?.ingredients) {
+        const lines = recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          const key = line.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            items.push({ ingredient: line, meal: meal.recipe_name, selected: true });
+          }
         }
       }
+    }
 
-      if (ingredientLines.length === 0) {
-        alert("No ingredients found. Add ingredients to your saved recipes via the recipe library.");
-        return;
-      }
+    if (items.length === 0) {
+      alert("No ingredients found. Save ingredients to your recipes via the recipe library.");
+      return;
+    }
+    setShoppingPanel(items);
+  }
 
-      // Deduplicate and create shopping items
-      const unique = [...new Set(ingredientLines)];
+  function toggleIngredient(index: number) {
+    setShoppingPanel((prev) =>
+      prev ? prev.map((item, i) => i === index ? { ...item, selected: !item.selected } : item) : prev
+    );
+  }
+
+  function toggleAllIngredients(selected: boolean) {
+    setShoppingPanel((prev) => prev ? prev.map((item) => ({ ...item, selected })) : prev);
+  }
+
+  async function confirmAddToShoppingList() {
+    if (!householdId || !shoppingPanel) return;
+    const chosen = shoppingPanel.filter((i) => i.selected);
+    if (chosen.length === 0) return;
+    setAddingToCart(true);
+    try {
       await Promise.all(
-        unique.map((name) =>
+        chosen.map((item) =>
           pb.collection("shopping_items").create({
             household: householdId,
-            name,
+            name: item.ingredient,
             category: "Meals",
             checked: false,
           })
         )
       );
-
+      setShoppingPanel(null);
       setCartAdded(true);
       setTimeout(() => setCartAdded(false), 3000);
     } finally {
@@ -222,8 +246,7 @@ export default function MealsPage() {
         <div className="flex items-center gap-2">
           {meals.length > 0 && (
             <button
-              onClick={addWeekToShoppingList}
-              disabled={addingToCart}
+              onClick={openShoppingPanel}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors",
                 cartAdded
@@ -232,7 +255,7 @@ export default function MealsPage() {
               )}
             >
               {cartAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-              {cartAdded ? "Added!" : addingToCart ? "Adding…" : "Add to shopping"}
+              {cartAdded ? "Added!" : "Add to shopping"}
             </button>
           )}
           <div className="flex items-center gap-1 text-sm">
@@ -242,6 +265,66 @@ export default function MealsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Ingredient selection panel ── */}
+      {shoppingPanel && (
+        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4 text-orange-500" />
+              <h2 className="font-bold text-sm">Add to shopping list</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => toggleAllIngredients(true)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                All
+              </button>
+              <button
+                onClick={() => toggleAllIngredients(false)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                None
+              </button>
+              <button onClick={() => setShoppingPanel(null)} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
+            </div>
+          </div>
+
+          <div className="divide-y max-h-72 overflow-y-auto">
+            {shoppingPanel.map((item, i) => (
+              <label
+                key={i}
+                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={item.selected}
+                  onChange={() => toggleIngredient(i)}
+                  className="h-4 w-4 rounded accent-primary shrink-0"
+                />
+                <span className={cn("flex-1 text-sm", !item.selected && "text-muted-foreground line-through")}>
+                  {item.ingredient}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">{item.meal}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="px-4 py-3 border-t flex items-center gap-3">
+            <Button
+              size="sm"
+              onClick={confirmAddToShoppingList}
+              disabled={addingToCart || shoppingPanel.every((i) => !i.selected)}
+            >
+              {addingToCart ? "Adding…" : `Add ${shoppingPanel.filter((i) => i.selected).length} item${shoppingPanel.filter((i) => i.selected).length === 1 ? "" : "s"}`}
+            </Button>
+            <button onClick={() => setShoppingPanel(null)} className="text-sm text-muted-foreground hover:text-foreground">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Desktop grid ── */}
       <div className="hidden md:block rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
