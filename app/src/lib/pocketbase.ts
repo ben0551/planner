@@ -73,7 +73,7 @@ export interface Chore {
   type: "single" | "everyone" | "shared";
   scope?: "all" | "kids";
   assignee?: string;
-  recurrence: "none" | "daily" | "weekly" | "fortnightly" | "monthly";
+  recurrence: "none" | "daily" | "weekly" | "odd_week" | "even_week" | "fortnightly" | "monthly";
   due_date?: string;
   completed: boolean;
   points: number;

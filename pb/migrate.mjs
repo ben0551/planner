@@ -68,17 +68,34 @@ async function main() {
     }
   }
 
-  // ── chores: add deadline_time (text) field ──
+  // ── chores: add deadline_time (text) field + odd_week/even_week recurrence values ──
   {
     const col = await getCollection("chores");
     if (!col) { console.error("Collection 'chores' not found."); }
     else {
       const schema = col.fields ?? col.schema ?? [];
+
+      // Add deadline_time if missing
       const needsDeadline = await addFieldIfMissing(col.id, schema, { name: "deadline_time" });
-      if (needsDeadline) {
-        const updated = [...schema, { name: "deadline_time", type: "text" }];
+
+      // Extend recurrence select to include odd_week / even_week
+      const recurrenceField = schema.find((f) => f.name === "recurrence");
+      const currentValues = recurrenceField?.options?.values ?? recurrenceField?.values ?? [];
+      const needsOdd = !currentValues.includes("odd_week");
+      const needsEven = !currentValues.includes("even_week");
+
+      if (needsDeadline || needsOdd || needsEven) {
+        const updated = schema.map((f) => {
+          if (f.name === "recurrence") {
+            const values = [...new Set([...currentValues, "odd_week", "even_week"])];
+            return { ...f, options: { ...(f.options ?? {}), values } };
+          }
+          return f;
+        });
+        if (needsDeadline) updated.push({ name: "deadline_time", type: "text" });
         await api(`collections/${col.id}`, "PATCH", { fields: updated });
-        console.log("chores: added 'deadline_time' field.");
+        if (needsDeadline) console.log("chores: added 'deadline_time' field.");
+        if (needsOdd || needsEven) console.log("chores: added 'odd_week' and 'even_week' recurrence values.");
       }
     }
   }

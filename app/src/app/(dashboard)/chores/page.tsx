@@ -64,9 +64,19 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function isoWeekNumber(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d.getTime() - jan4.getTime()) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7);
+}
+
 function isDueOnDate(chore: Chore, dateStr: string): boolean {
   if (chore.recurrence === "daily") return true;
   if (chore.recurrence === "weekly") return true;
+  if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
+  if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
   if (chore.recurrence === "fortnightly") {
     if (!chore.due_date) return true;
     const ref = new Date(chore.due_date);
@@ -371,7 +381,8 @@ export default function ChoresPage() {
                 className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
                 <option value="daily">Every day</option>
                 <option value="weekly">Every week</option>
-                <option value="fortnightly">Fortnightly</option>
+                <option value="odd_week">Odd weeks (1, 3, 5…)</option>
+                <option value="even_week">Even weeks (2, 4, 6…)</option>
                 <option value="monthly">Monthly</option>
                 <option value="none">Just once</option>
               </select>
