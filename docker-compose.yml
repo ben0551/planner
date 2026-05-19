@@ -3,6 +3,7 @@ services:
     image: ghcr.io/ben0551/planner/planner-pb:latest
     container_name: planner-pb
     restart: unless-stopped
+    # Not exposed via Traefik — the app container proxies PocketBase internally
     ports:
       - "8090:8090"
     volumes:
@@ -15,13 +16,13 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - default
 
   app:
     image: ghcr.io/ben0551/planner/planner-app:latest
     container_name: planner-app
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
       - PB_INTERNAL_URL=http://pocketbase:8090
       - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
@@ -32,3 +33,17 @@ services:
     depends_on:
       pocketbase:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.planner.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.planner.entrypoints=websecure"
+      - "traefik.http.routers.planner.tls.certresolver=letsencrypt"
+      - "traefik.http.services.planner.loadbalancer.server.port=3000"
+    networks:
+      - default
+      - traefik
+
+networks:
+  default:
+  traefik:
+    external: true
