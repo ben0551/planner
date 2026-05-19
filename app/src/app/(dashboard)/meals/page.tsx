@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { BookOpen, Plus, Search } from "lucide-react";
+import { BookOpen, Plus, Search, ShoppingCart, Check } from "lucide-react";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -53,6 +53,8 @@ export default function MealsPage() {
   const [saving, setSaving] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [showRecipePicker, setShowRecipePicker] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartAdded, setCartAdded] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -157,6 +159,47 @@ export default function MealsPage() {
     setRecipes((prev) => prev.filter((r) => r.id !== id));
   }
 
+  async function addWeekToShoppingList() {
+    if (!householdId) return;
+    setAddingToCart(true);
+    try {
+      // Collect all ingredients from recipes that match meals planned this week
+      const ingredientLines: string[] = [];
+      for (const meal of meals) {
+        const recipe = recipes.find(
+          (r) => r.name.toLowerCase() === meal.recipe_name.toLowerCase() && r.meal_type === meal.meal_type
+        );
+        if (recipe?.ingredients) {
+          const lines = recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean);
+          ingredientLines.push(...lines);
+        }
+      }
+
+      if (ingredientLines.length === 0) {
+        alert("No ingredients found. Add ingredients to your saved recipes via the recipe library.");
+        return;
+      }
+
+      // Deduplicate and create shopping items
+      const unique = [...new Set(ingredientLines)];
+      await Promise.all(
+        unique.map((name) =>
+          pb.collection("shopping_items").create({
+            household: householdId,
+            name,
+            category: "Meals",
+            checked: false,
+          })
+        )
+      );
+
+      setCartAdded(true);
+      setTimeout(() => setCartAdded(false), 3000);
+    } finally {
+      setAddingToCart(false);
+    }
+  }
+
   const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
 
   const editingMeal = editing ? getMeal(editing.date, editing.mealType) : undefined;
@@ -174,12 +217,29 @@ export default function MealsPage() {
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-xl font-bold">Meal Planner</h1>
-        <div className="flex items-center gap-1 text-sm">
-          <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>←</Button>
-          <span className="hidden sm:inline w-44 text-center text-muted-foreground text-xs">{weekLabel}</span>
-          <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>→</Button>
+        <div className="flex items-center gap-2">
+          {meals.length > 0 && (
+            <button
+              onClick={addWeekToShoppingList}
+              disabled={addingToCart}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors",
+                cartAdded
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+              )}
+            >
+              {cartAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+              {cartAdded ? "Added!" : addingToCart ? "Adding…" : "Add to shopping"}
+            </button>
+          )}
+          <div className="flex items-center gap-1 text-sm">
+            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>←</Button>
+            <span className="hidden sm:inline w-44 text-center text-muted-foreground text-xs">{weekLabel}</span>
+            <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>→</Button>
+          </div>
         </div>
       </div>
 
