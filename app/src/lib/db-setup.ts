@@ -213,6 +213,38 @@ export async function ensureSchema(): Promise<string[]> {
     }
   }
 
+  // ── ensure API rules ──
+
+  // re-fetch collections so we have fresh rule state
+  const freshCollections = await pbApi(token, "collections?perPage=200");
+  const fresh: Record<string, any> = {};
+  for (const c of freshCollections.items ?? []) fresh[c.name] = c;
+
+  // users collection: allow public registration
+  const usersCol = fresh["users"] ?? freshCollections.items?.find((c: any) => c.id === "_pb_users_auth_");
+  if (usersCol && usersCol.createRule !== "") {
+    await pbApi(token, `collections/${usersCol.id}`, "PATCH", { createRule: "" });
+    log.push("users: set createRule to public");
+  }
+
+  // all app collections: allow authenticated users
+  const AUTH = '@request.auth.id != ""';
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events"];
+  for (const name of appCols) {
+    const col = fresh[name];
+    if (!col) continue;
+    if (col.listRule === null || col.viewRule === null || col.createRule === null || col.updateRule === null || col.deleteRule === null) {
+      await pbApi(token, `collections/${col.id}`, "PATCH", {
+        listRule: AUTH,
+        viewRule: AUTH,
+        createRule: AUTH,
+        updateRule: AUTH,
+        deleteRule: AUTH,
+      });
+      log.push(`${name}: set API rules to authenticated`);
+    }
+  }
+
   // fix emailVisibility on child accounts
   try {
     const pinMembers = await pbApi(
