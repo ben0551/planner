@@ -120,6 +120,7 @@ export interface Goal {
   target_points: number;
   reward_description?: string;
   achieved: boolean;
+  private?: boolean;
 }
 
 export interface MealRecipe {

@@ -154,6 +154,8 @@ export default function ChoresPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ChoreFormState>(defaultForm());
   const [saving, setSaving] = useState(false);
+  const [adminView, setAdminView] = useState(false);
+  const [adminDay, setAdminDay] = useState(() => toDateStr(new Date()));
 
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const todayStr = toDateStr(new Date());
@@ -184,8 +186,25 @@ export default function ChoresPage() {
     return completions.some(c => c.chore === chore.id && c.date.startsWith(dateStr));
   }
 
+  async function toggleForKid(chore: Chore, dateStr: string, kidId: string) {
+    const existing = completions.find(c =>
+      c.chore === chore.id && c.date.startsWith(dateStr) && c.user === kidId
+    );
+    if (existing) {
+      await pb.collection("chore_completions").delete(existing.id);
+      setCompletions(prev => prev.filter(c => c.id !== existing.id));
+    } else {
+      const created = await pb.collection("chore_completions").create({
+        chore: chore.id, user: kidId, date: dateStr, points: chore.points ?? 0,
+      });
+      setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+    }
+  }
+
   async function toggleOnDate(chore: Chore, dateStr: string) {
     if (!user) return;
+    if (dateStr > todayStr) return;
+    if (!isOwner && chore.assignee && chore.assignee !== user.id) return;
     const existing = completions.find(c =>
       c.chore === chore.id &&
       c.date.startsWith(dateStr) &&
@@ -226,18 +245,17 @@ export default function ChoresPage() {
     if (!form.title.trim() || !householdId) return;
     setSaving(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         household: householdId,
         title: form.title.trim(),
         type: form.type,
-        scope: form.type === "everyone" ? form.scope : undefined,
-        assignee: form.type !== "everyone" && form.assignee ? form.assignee : undefined,
         recurrence: form.recurrence,
-        due_date: form.dueDate || undefined,
         points: form.points,
-        deadline_time: form.deadlineTime || undefined,
-        completed: false,
       };
+      if (form.type === "everyone") payload.scope = form.scope;
+      if (form.type !== "everyone" && form.assignee) payload.assignee = form.assignee;
+      if (form.dueDate) payload.due_date = form.dueDate;
+      if (form.deadlineTime) payload.deadline_time = form.deadlineTime;
       if (editingId) {
         await pb.collection("chores").update(editingId, payload);
         const full = await pb.collection("chores").getOne(editingId, { expand: "assignee" });
@@ -263,7 +281,11 @@ export default function ChoresPage() {
     .sort((a, b) => b.points - a.points);
   const maxPoints = Math.max(1, ...scoreboard.map(s => s.points));
 
-  const activeChores = chores.filter(c => c.recurrence !== "none" || !c.due_date || c.due_date >= toDateStr(weekStart));
+  const activeChores = chores.filter(c => {
+    if (c.recurrence !== "none" && c.due_date && c.due_date < toDateStr(weekStart)) return false;
+    if (!isOwner && c.assignee && c.assignee !== user?.id) return false;
+    return true;
+  });
   const kidMembers = members.filter(m => m.hasPin);
 
   const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric" })}`;
@@ -274,6 +296,8 @@ export default function ChoresPage() {
     chore: Chore; dateStr: string; compact?: boolean;
   }) {
     const done = isCompletedOnDate(chore, dateStr);
+    const isFuture = dateStr > todayStr;
+    const isOtherKid = !isOwner && chore.assignee && chore.assignee !== user?.id;
     const col = choreColor(chore.id);
     const scopeMembers = chore.scope === "kids" ? kidMembers : members;
     const totalDone = chore.type === "everyone"
@@ -284,13 +308,16 @@ export default function ChoresPage() {
       <div
         onClick={() => toggleOnDate(chore, dateStr)}
         className={cn(
-          "relative rounded-2xl border flex flex-col items-center text-center cursor-pointer select-none transition-all hover:shadow-sm active:scale-95",
+          "relative rounded-2xl border flex flex-col items-center text-center select-none transition-all",
           compact ? "p-2 gap-1" : "p-3 gap-1.5",
-          col,
-          done && "opacity-50"
+          isFuture || isOtherKid
+            ? "opacity-30 cursor-default " + col
+            : done
+              ? "cursor-pointer active:scale-95 bg-emerald-50 border-emerald-300"
+              : "cursor-pointer hover:shadow-sm active:scale-95 " + col,
         )}
       >
-        {isOwner && (
+        {isOwner && !isFuture && (
           <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100"
             onClick={e => e.stopPropagation()}>
             <button onClick={() => startEdit(chore)}
@@ -300,12 +327,12 @@ export default function ChoresPage() {
           </div>
         )}
         <span className={cn("leading-none", compact ? "text-2xl mt-0.5" : "text-4xl mt-1")}>
-          {choreEmoji(chore.title)}
+          {done ? "✅" : choreEmoji(chore.title)}
         </span>
-        <p className={cn("font-black leading-tight", compact ? "text-[10px]" : "text-xs", done && "line-through")}>
+        <p className={cn("font-black leading-tight", compact ? "text-[10px]" : "text-xs", done && "line-through text-emerald-700")}>
           {chore.title}
         </p>
-        {(chore.points ?? 0) > 0 && (
+        {!done && (chore.points ?? 0) > 0 && (
           <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-black">
             <Star className={cn("fill-amber-400 stroke-amber-400", compact ? "h-2 w-2" : "h-2.5 w-2.5")} />
             {chore.points} pts
@@ -317,7 +344,9 @@ export default function ChoresPage() {
         {chore.type === "everyone" && (
           <span className="text-[9px] text-muted-foreground">{totalDone}/{scopeMembers.length}</span>
         )}
-        {done && <CheckCircle2 className={cn("text-emerald-500 mt-0.5", compact ? "h-3.5 w-3.5" : "h-5 w-5")} />}
+        {done && (
+          <span className="text-[9px] text-emerald-600 font-bold">tap to undo</span>
+        )}
       </div>
     );
   }
@@ -329,18 +358,113 @@ export default function ChoresPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-black">Chores</h1>
         {isOwner && (
-          <button
-            onClick={() => showForm ? cancelForm() : setShowForm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
-          >
-            <Plus className="h-4 w-4" />
-            Add chore
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setAdminView(v => !v); cancelForm(); }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl text-sm font-bold transition-colors",
+                adminView
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {adminView ? "← Back" : "Admin"}
+            </button>
+            {!adminView && (
+              <button
+                onClick={() => showForm ? cancelForm() : setShowForm(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+              >
+                <Plus className="h-4 w-4" />
+                Add chore
+              </button>
+            )}
+          </div>
         )}
       </div>
 
+      {/* Admin view */}
+      {adminView && isOwner && (() => {
+        const adminDayChores = activeChores.filter(c => isDueOnDate(c, adminDay, custodyWeek));
+        return (
+          <div className="flex flex-col gap-3">
+            {/* Day tabs */}
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {weekDates.map((date, i) => {
+                const ds = toDateStr(date);
+                const isToday = ds === todayStr;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setAdminDay(ds)}
+                    className={cn(
+                      "flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-xl text-xs font-bold transition-colors",
+                      adminDay === ds
+                        ? "bg-primary text-primary-foreground"
+                        : isToday
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <span>{DAY_NAMES[i]}</span>
+                    <span className="text-[10px] font-normal">{date.getDate()}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {adminDayChores.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No chores on this day.</p>
+            ) : (
+              <div className="rounded-2xl bg-white border border-border overflow-hidden divide-y">
+                {adminDayChores.map(chore => {
+                  const scopeKids = chore.type === "everyone"
+                    ? (chore.scope === "kids" ? kidMembers : members)
+                    : chore.assignee
+                      ? members.filter(m => m.id === chore.assignee)
+                      : kidMembers;
+                  return (
+                    <div key={chore.id} className="px-4 py-3 flex items-center gap-3">
+                      <span className="text-xl shrink-0">{choreEmoji(chore.title)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate">{chore.title}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {chore.type === "everyone" ? "everyone" : chore.assignee ? (members.find(m => m.id === chore.assignee)?.name ?? "?") : "anyone"}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        {scopeKids.map(kid => {
+                          const kidDone = completions.some(c =>
+                            c.chore === chore.id && c.date.startsWith(adminDay) && c.user === kid.id
+                          );
+                          return (
+                            <button
+                              key={kid.id}
+                              onClick={() => toggleForKid(chore, adminDay, kid.id)}
+                              className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors",
+                                kidDone
+                                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                  : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                              )}
+                            >
+                              <span>{kidDone ? "✓" : "○"}</span>
+                              <span>{kid.name.split(" ")[0]}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Scoreboard */}
-      {scoreboard.some(m => m.points > 0) && (
+      {!adminView && scoreboard.some(m => m.points > 0) && (
         <div className="rounded-3xl overflow-hidden shadow-sm border border-border bg-white">
           <div className="px-4 pt-3 pb-1 flex items-center gap-2">
             <Trophy className="h-4 w-4 text-amber-500" />
@@ -362,7 +486,7 @@ export default function ChoresPage() {
       )}
 
       {/* Add / Edit form */}
-      {showForm && (
+      {!adminView && showForm && (
         <div className="rounded-3xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
           <p className="font-black text-sm">{editingId ? "Edit chore" : "New chore"}</p>
 
@@ -450,13 +574,13 @@ export default function ChoresPage() {
         </div>
       )}
 
-      {chores.length === 0 && !showForm && (
+      {!adminView && chores.length === 0 && !showForm && (
         <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-10 text-center text-muted-foreground text-sm">
           {isOwner ? "No chores yet — add one above! 🎉" : "No chores set yet."}
         </div>
       )}
 
-      {chores.length > 0 && (
+      {!adminView && chores.length > 0 && (
         <>
           {/* Week navigation */}
           <div className="flex items-center justify-between">

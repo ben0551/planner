@@ -29,10 +29,8 @@ function cacheHousehold(householdId: string, householdName: string, members: Cac
 }
 
 function clearCache() {
-  try {
-    localStorage.removeItem("planner_household");
-    localStorage.removeItem("planner_members");
-  } catch {}
+  // Keep planner_household and planner_members so the family picker still
+  // works after logout — they only contain names and emails, no credentials.
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

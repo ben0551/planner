@@ -29,6 +29,7 @@ export default function SettingsPage() {
   );
   const [custodySaving, setCustodySaving] = useState(false);
   const [custodySaved, setCustodySaved] = useState(false);
+  const [custodyError, setCustodyError] = useState("");
   const [migrating, setMigrating] = useState(false);
   const [migrateLog, setMigrateLog] = useState<string[] | null>(null);
   const [migrateError, setMigrateError] = useState("");
@@ -52,10 +53,13 @@ export default function SettingsPage() {
   async function saveCustodyWeek() {
     if (!household?.id) return;
     setCustodySaving(true);
+    setCustodyError("");
     try {
       await pb.collection("households").update(household.id, { custody_week: custodyWeek });
       setCustodySaved(true);
       setTimeout(() => setCustodySaved(false), 2000);
+    } catch (err: any) {
+      setCustodyError(err?.message ?? "Save failed. Try running Sync Database in the section below.");
     } finally {
       setCustodySaving(false);
     }
@@ -100,6 +104,7 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               Set which weeks the kids are with you. Chores can then be set to <strong>"My Week"</strong> and will automatically appear on the right weeks.
             </p>
+            {custodyError && <p className="text-xs text-destructive">{custodyError}</p>}
             <div className="flex flex-col gap-2">
               {CUSTODY_OPTIONS.map((opt) => (
                 <label key={opt.value}

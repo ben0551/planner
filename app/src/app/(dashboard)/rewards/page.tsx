@@ -6,7 +6,7 @@ import { getClient, type Goal, type ChoreCompletion, type CachedMember } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Star, Trophy, Target, CheckCircle2 } from "lucide-react";
+import { Star, Trophy, Target, CheckCircle2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function weekStartStr() {
@@ -40,7 +40,8 @@ export default function RewardsPage() {
   const [memberPoints, setMemberPoints] = useState<MemberPoints[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
-  const [goalForm, setGoalForm] = useState({ userId: "", title: "", target: 100, reward: "" });
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [goalForm, setGoalForm] = useState({ userId: "", title: "", target: 100, reward: "", private: false });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -89,21 +90,44 @@ export default function RewardsPage() {
     load().catch(() => setLoading(false));
   }, [householdId]);
 
+  function startEditGoal(goal: Goal) {
+    setEditingGoalId(goal.id);
+    setGoalForm({
+      userId: goal.user,
+      title: goal.title,
+      target: goal.target_points,
+      reward: goal.reward_description ?? "",
+      private: goal.private ?? false,
+    });
+    setShowGoalForm(true);
+  }
+
+  function cancelGoalForm() {
+    setShowGoalForm(false);
+    setEditingGoalId(null);
+    setGoalForm({ userId: "", title: "", target: 100, reward: "", private: false });
+  }
+
   async function saveGoal() {
     if (!goalForm.title.trim() || !goalForm.userId || !householdId) return;
     setSaving(true);
     try {
-      const created = await pb.collection("goals").create({
+      const payload = {
         household: householdId,
         user: goalForm.userId,
         title: goalForm.title.trim(),
         target_points: goalForm.target,
         reward_description: goalForm.reward.trim() || undefined,
-        achieved: false,
-      });
-      setGoals((prev) => [...prev, created as unknown as Goal]);
-      setShowGoalForm(false);
-      setGoalForm({ userId: "", title: "", target: 100, reward: "" });
+        private: goalForm.private,
+      };
+      if (editingGoalId) {
+        const updated = await pb.collection("goals").update(editingGoalId, payload);
+        setGoals((prev) => prev.map((g) => g.id === editingGoalId ? updated as unknown as Goal : g));
+      } else {
+        const created = await pb.collection("goals").create({ ...payload, achieved: false });
+        setGoals((prev) => [...prev, created as unknown as Goal]);
+      }
+      cancelGoalForm();
     } finally {
       setSaving(false);
     }
@@ -177,7 +201,7 @@ export default function RewardsPage() {
           </div>
           {isOwner && (
             <button
-              onClick={() => setShowGoalForm((v) => !v)}
+              onClick={() => showGoalForm ? cancelGoalForm() : setShowGoalForm(true)}
               className="text-xs text-orange-500 font-medium hover:underline"
             >
               {showGoalForm ? "Cancel" : "+ New goal"}
@@ -227,8 +251,19 @@ export default function RewardsPage() {
                 placeholder="e.g. Pick a movie for family night"
               />
             </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={goalForm.private}
+                onChange={(e) => setGoalForm((f) => ({ ...f, private: e.target.checked }))}
+                className="accent-primary"
+              />
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Private — only visible to this child and you
+              </span>
+            </label>
             <Button size="sm" onClick={saveGoal} disabled={saving || !goalForm.title.trim() || !goalForm.userId}>
-              {saving ? "Saving…" : "Add goal"}
+              {saving ? "Saving…" : editingGoalId ? "Save changes" : "Add goal"}
             </Button>
           </div>
         )}
@@ -241,7 +276,7 @@ export default function RewardsPage() {
           </div>
         ) : (
           <div className="divide-y">
-            {goals.map((goal) => {
+            {goals.filter((goal) => !goal.private || isOwner || user?.id === goal.user).map((goal) => {
               const mp = allMembers.find((m) => m.member.userId === goal.user);
               const currentPts = mp?.totalPoints ?? 0;
               const pct = Math.min(1, currentPts / goal.target_points);
@@ -253,6 +288,7 @@ export default function RewardsPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold">{goal.title}</p>
                         {goal.achieved && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
+                        {goal.private && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
                       </div>
                       {mp && <p className="text-xs text-muted-foreground">{mp.member.name.split(" ")[0]}</p>}
                       {goal.reward_description && (
@@ -278,6 +314,9 @@ export default function RewardsPage() {
                     <div className="flex gap-3 mt-2">
                       <button onClick={() => markAchieved(goal)} className="text-[11px] text-emerald-600 hover:underline">
                         {goal.achieved ? "Unmark achieved" : "Mark achieved"}
+                      </button>
+                      <button onClick={() => startEditGoal(goal)} className="text-[11px] text-primary hover:underline">
+                        Edit
                       </button>
                       <button onClick={() => deleteGoal(goal.id)} className="text-[11px] text-muted-foreground hover:text-destructive">
                         Delete

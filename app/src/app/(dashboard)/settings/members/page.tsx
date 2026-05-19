@@ -190,6 +190,7 @@ export default function MembersPage() {
       const newUser = await pb.collection("users").create({
         name: childName.trim(),
         email,
+        emailVisibility: true,
         password,
         passwordConfirm: password,
       });

@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-
-const PB_URL = process.env.NEXT_PUBLIC_POCKETBASE_URL ?? "http://localhost:8090";
-const PB_ADMIN_EMAIL = process.env.PB_ADMIN_EMAIL;
-const PB_ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD;
+import { getPbAdminToken, PB_URL } from "../_pb-admin";
 
 async function pbApi(token: string, path: string, method = "GET", body?: object) {
   const res = await fetch(`${PB_URL}/api/${path}`, {
@@ -25,22 +22,12 @@ function hasField(schema: any[], fieldName: string) {
 }
 
 export async function POST() {
-  if (!PB_ADMIN_EMAIL || !PB_ADMIN_PASSWORD) {
-    return NextResponse.json(
-      { error: "Set PB_ADMIN_EMAIL and PB_ADMIN_PASSWORD environment variables." },
-      { status: 500 }
-    );
+  let token: string;
+  try {
+    token = await getPbAdminToken();
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  const authRes = await fetch(`${PB_URL}/api/collections/_superusers/auth-with-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identity: PB_ADMIN_EMAIL, password: PB_ADMIN_PASSWORD }),
-  });
-  if (!authRes.ok) {
-    return NextResponse.json({ error: "Admin authentication failed." }, { status: 500 });
-  }
-  const { token } = await authRes.json();
 
   const log: string[] = [];
 
@@ -52,24 +39,31 @@ export async function POST() {
       let updated = [...schema];
       let dirty = false;
 
-      // deadline_time field
-      if (!hasField(schema, "deadline_time")) {
-        updated.push({ name: "deadline_time", type: "text" });
-        log.push("chores: added deadline_time");
-        dirty = true;
+      for (const f of [
+        { name: "deadline_time", type: "text" },
+        { name: "scope", type: "text" },
+      ]) {
+        if (!hasField(schema, f.name)) {
+          updated.push(f);
+          log.push(`chores: added ${f.name}`);
+          dirty = true;
+        }
       }
 
       // recurrence select — add new values
       const recurrenceIdx = updated.findIndex((f: any) => f.name === "recurrence");
       if (recurrenceIdx >= 0) {
         const field = updated[recurrenceIdx];
-        const currentVals: string[] = field.options?.values ?? field.values ?? [];
+        // PocketBase >= 0.22 stores values at field.values; older at field.options.values
+        const currentVals: string[] = field.values ?? field.options?.values ?? [];
         const newVals = ["odd_week", "even_week", "my_week"];
         const missing = newVals.filter((v) => !currentVals.includes(v));
         if (missing.length > 0) {
+          const merged = [...currentVals, ...missing];
           updated[recurrenceIdx] = {
             ...field,
-            options: { ...(field.options ?? {}), values: [...currentVals, ...missing] },
+            values: merged,
+            options: { ...(field.options ?? {}), values: merged },
           };
           log.push(`chores: added recurrence values: ${missing.join(", ")}`);
           dirty = true;
@@ -146,6 +140,27 @@ export async function POST() {
         dirty = true;
       }
       if (dirty) await pbApi(token, `collections/${meals.id}`, "PATCH", { fields: updated });
+    }
+
+    // ── goals ──
+    const goals = await getCollection(token, "goals");
+    if (goals) {
+      const schema: any[] = goals.fields ?? goals.schema ?? [];
+      if (!hasField(schema, "private")) {
+        const updated = [...schema, { name: "private", type: "bool" }];
+        await pbApi(token, `collections/${goals.id}`, "PATCH", { fields: updated });
+        log.push("goals: added private");
+      }
+    }
+
+    // ── fix emailVisibility for child accounts ──
+    const pinMembers = await pbApi(token, `collections/memberships/records?filter=${encodeURIComponent('pin!=""')}&expand=user&perPage=200`);
+    for (const m of pinMembers.items ?? []) {
+      const uid = m.expand?.user?.id ?? m.user;
+      if (uid && m.expand?.user?.emailVisibility === false) {
+        await pbApi(token, `collections/users/records/${uid}`, "PATCH", { emailVisibility: true });
+        log.push(`users: fixed emailVisibility for ${m.expand?.user?.email ?? uid}`);
+      }
     }
 
     if (log.length === 0) log.push("All fields already up to date.");
