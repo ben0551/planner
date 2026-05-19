@@ -6,7 +6,7 @@ import { getClient } from "@/lib/pocketbase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Users, UserPlus, ChevronRight, CalendarRange } from "lucide-react";
+import { Users, UserPlus, ChevronRight, CalendarRange, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type CustodyWeek = "odd" | "even" | "";
@@ -29,6 +29,25 @@ export default function SettingsPage() {
   );
   const [custodySaving, setCustodySaving] = useState(false);
   const [custodySaved, setCustodySaved] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateLog, setMigrateLog] = useState<string[] | null>(null);
+  const [migrateError, setMigrateError] = useState("");
+
+  async function runMigration() {
+    setMigrating(true);
+    setMigrateLog(null);
+    setMigrateError("");
+    try {
+      const res = await fetch("/api/migrate", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Migration failed.");
+      setMigrateLog(data.log ?? []);
+    } catch (err) {
+      setMigrateError(err instanceof Error ? err.message : "Migration failed.");
+    } finally {
+      setMigrating(false);
+    }
+  }
 
   async function saveCustodyWeek() {
     if (!household?.id) return;
@@ -113,6 +132,30 @@ export default function SettingsPage() {
               onClick={saveCustodyWeek}
             >
               {custodySaving ? "Saving…" : custodySaved ? "✓ Saved!" : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sync database — owners only */}
+      {isOwner && (
+        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Database</p>
+          </div>
+          <div className="px-4 py-3 flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              After updating the app, run this to add any new fields to your database. Safe to run multiple times.
+            </p>
+            {migrateError && <p className="text-xs text-destructive">{migrateError}</p>}
+            {migrateLog && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                {migrateLog.map((line, i) => <p key={i}>{line}</p>)}
+              </div>
+            )}
+            <Button size="sm" variant="outline" className="self-start rounded-xl" disabled={migrating} onClick={runMigration}>
+              {migrating ? "Syncing…" : migrateLog ? "✓ Synced" : "Sync Database"}
             </Button>
           </div>
         </div>
