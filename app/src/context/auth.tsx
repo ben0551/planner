@@ -10,7 +10,9 @@ interface AuthContextValue {
   membership: Membership | null;
   householdId: string | null;
   loading: boolean;
+  setupRequired: boolean;
   logout: () => void;
+  refreshMembership: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -18,7 +20,9 @@ const AuthContext = createContext<AuthContextValue>({
   membership: null,
   householdId: null,
   loading: true,
+  setupRequired: false,
   logout: () => {},
+  refreshMembership: () => {},
 });
 
 function cacheHousehold(householdId: string, householdName: string, members: CachedMember[]) {
@@ -38,6 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<RecordModel | null>(pb.authStore.record);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [loading, setLoading] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [membershipTick, setMembershipTick] = useState(0);
 
   useEffect(() => {
     const unsub = pb.authStore.onChange((_, record) => {
@@ -47,17 +53,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [pb]);
 
+  function refreshMembership() {
+    setMembershipTick((t) => t + 1);
+  }
+
   useEffect(() => {
     if (!user) {
       setLoading(false);
+      setSetupRequired(false);
       return;
     }
 
     async function fetchMembership() {
-      const m = await pb
-        .collection("memberships")
-        .getFirstListItem(`user="${user!.id}"`, { expand: "household" });
+      let m: any;
+      try {
+        m = await pb
+          .collection("memberships")
+          .getFirstListItem(`user="${user!.id}"`, { expand: "household" });
+      } catch {
+        setMembership(null);
+        setSetupRequired(true);
+        return;
+      }
 
+      setSetupRequired(false);
       const typed = m as unknown as Membership;
       setMembership(typed);
       applyTheme(typed.theme);
@@ -69,7 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         filter: `household="${householdId}"`,
         expand: "user",
       });
-      const pbUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL ?? "http://localhost:8090";
       const cached: CachedMember[] = allMembers.map((mem: any) => {
         const avatarFile = mem.expand?.user?.avatar as string | undefined;
         const uid = mem.expand?.user?.id ?? mem.user;
@@ -83,17 +101,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           permissions: mem.permissions as Permissions | undefined,
           theme: mem.theme as string | undefined,
           avatarUrl: avatarFile
-            ? `${pbUrl}/api/files/users/${uid}/${avatarFile}`
+            ? `/pb/api/files/users/${uid}/${avatarFile}`
             : undefined,
         };
       });
       cacheHousehold(householdId, householdName, cached);
     }
 
-    fetchMembership()
-      .catch(() => setMembership(null))
-      .finally(() => setLoading(false));
-  }, [user, pb]);
+    fetchMembership().finally(() => setLoading(false));
+  }, [user, pb, membershipTick]);
 
   function logout() {
     pb.authStore.clear();
@@ -108,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         membership,
         householdId: membership?.household ?? null,
         loading,
+        setupRequired,
         logout,
+        refreshMembership,
       }}
     >
       {children}
