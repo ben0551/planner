@@ -72,11 +72,16 @@ function isoWeekNumber(date: Date): number {
   return 1 + Math.round(((d.getTime() - jan4.getTime()) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7);
 }
 
-function isDueOnDate(chore: Chore, dateStr: string): boolean {
+function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
   if (chore.recurrence === "daily") return true;
   if (chore.recurrence === "weekly") return true;
   if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
   if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
+  if (chore.recurrence === "my_week") {
+    if (!custodyWeek) return false; // no custody schedule set
+    const weekNum = isoWeekNumber(new Date(dateStr));
+    return custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0;
+  }
   if (chore.recurrence === "fortnightly") {
     if (!chore.due_date) return true;
     const ref = new Date(chore.due_date);
@@ -134,6 +139,7 @@ function formFromChore(c: Chore): ChoreFormState {
 
 export default function ChoresPage() {
   const { householdId, user, membership } = useAuth();
+  const custodyWeek = membership?.expand?.household?.custody_week as "odd" | "even" | "" | undefined;
   const pb = getClient();
   const isOwner = membership?.role === "owner";
   const chorePerm = usePermission("chores");
@@ -381,6 +387,9 @@ export default function ChoresPage() {
                 className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
                 <option value="daily">Every day</option>
                 <option value="weekly">Every week</option>
+                {custodyWeek && (
+                  <option value="my_week">My week 🏠 ({custodyWeek === "odd" ? "odd" : "even"} weeks)</option>
+                )}
                 <option value="odd_week">Odd weeks (1, 3, 5…)</option>
                 <option value="even_week">Even weeks (2, 4, 6…)</option>
                 <option value="monthly">Monthly</option>
@@ -467,7 +476,7 @@ export default function ChoresPage() {
             {weekDates.map((date, i) => {
               const ds = toDateStr(date);
               const isToday = ds === todayStr;
-              const dueChores = activeChores.filter(c => isDueOnDate(c, ds));
+              const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
               const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
               const allDone = dueChores.length > 0 && doneCount === dueChores.length;
 
@@ -511,7 +520,7 @@ export default function ChoresPage() {
                 const ds = toDateStr(date);
                 const isToday = ds === todayStr;
                 const selected = i === selectedDay;
-                const dueChores = activeChores.filter(c => isDueOnDate(c, ds));
+                const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
                 const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
                 return (
                   <button key={ds} onClick={() => setSelectedDay(i)}
@@ -539,7 +548,7 @@ export default function ChoresPage() {
             {/* Chore cards for selected day */}
             {(() => {
               const ds = toDateStr(weekDates[selectedDay]);
-              const dueToday = activeChores.filter(c => isDueOnDate(c, ds));
+              const dueToday = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
               if (dueToday.length === 0) {
                 return (
                   <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-8 text-center text-sm text-muted-foreground">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, usePermission } from "@/context/auth";
 import type { Permissions } from "@/lib/pocketbase";
+import { getTheme } from "@/lib/themes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -49,6 +50,7 @@ export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, membership, logout } = useAuth();
+  const theme = getTheme(membership?.theme);
 
   function canSee(href: string): boolean {
     const key = PAGE_PERMISSION_KEY[href];
@@ -69,7 +71,7 @@ export function Nav() {
     <>
       {/* ── Desktop sidebar ─────────────────────────────── */}
       <aside className="hidden md:flex flex-col w-60 shrink-0 overflow-y-auto"
-        style={{ background: "linear-gradient(175deg, #7c3aed 0%, #4f46e5 100%)" }}>
+        style={{ background: theme.gradient }}>
 
         {/* Logo */}
         <div className="px-5 pt-6 pb-4">
@@ -123,7 +125,7 @@ export function Nav() {
       {/* ── Mobile top bar ──────────────────────────────── */}
       <header
         className="md:hidden flex items-center justify-between px-4 h-13 sticky top-0 z-40"
-        style={{ background: "linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)" }}
+        style={{ background: theme.gradient.replace("175deg", "90deg") }}
       >
         <span className="font-black text-base tracking-tight text-white">✨ Planner</span>
         <DropdownMenu>

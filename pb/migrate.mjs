@@ -78,16 +78,16 @@ async function main() {
       // Add deadline_time if missing
       const needsDeadline = await addFieldIfMissing(col.id, schema, { name: "deadline_time" });
 
-      // Extend recurrence select to include odd_week / even_week
+      // Extend recurrence select to include odd_week / even_week / my_week
       const recurrenceField = schema.find((f) => f.name === "recurrence");
       const currentValues = recurrenceField?.options?.values ?? recurrenceField?.values ?? [];
-      const needsOdd = !currentValues.includes("odd_week");
-      const needsEven = !currentValues.includes("even_week");
+      const newRecurrenceValues = ["odd_week", "even_week", "my_week"];
+      const needsRecurrenceUpdate = newRecurrenceValues.some((v) => !currentValues.includes(v));
 
-      if (needsDeadline || needsOdd || needsEven) {
+      if (needsDeadline || needsRecurrenceUpdate) {
         const updated = schema.map((f) => {
           if (f.name === "recurrence") {
-            const values = [...new Set([...currentValues, "odd_week", "even_week"])];
+            const values = [...new Set([...currentValues, ...newRecurrenceValues])];
             return { ...f, options: { ...(f.options ?? {}), values } };
           }
           return f;
@@ -95,7 +95,7 @@ async function main() {
         if (needsDeadline) updated.push({ name: "deadline_time", type: "text" });
         await api(`collections/${col.id}`, "PATCH", { fields: updated });
         if (needsDeadline) console.log("chores: added 'deadline_time' field.");
-        if (needsOdd || needsEven) console.log("chores: added 'odd_week' and 'even_week' recurrence values.");
+        if (needsRecurrenceUpdate) console.log("chores: added odd_week / even_week / my_week recurrence values.");
       }
     }
   }
@@ -113,6 +113,41 @@ async function main() {
           await api(`collections/${col.id}`, "PATCH", { fields: updated });
           console.log(`meal_recipes: added '${field.name}' field.`);
         }
+      }
+    }
+  }
+
+  // ── households: add custody_week (text) field ──
+  {
+    const col = await getCollection("households");
+    if (!col) { console.error("Collection 'households' not found."); }
+    else {
+      const schema = col.fields ?? col.schema ?? [];
+      const needs = await addFieldIfMissing(col.id, schema, { name: "custody_week" });
+      if (needs) {
+        const updated = [...schema, { name: "custody_week", type: "text" }];
+        await api(`collections/${col.id}`, "PATCH", { fields: updated });
+        console.log("households: added 'custody_week' field.");
+      }
+    }
+  }
+
+  // ── memberships: add theme (text) field ──
+  {
+    const col = await getCollection("memberships");
+    if (!col) { console.error("Collection 'memberships' not found."); }
+    else {
+      const schema = col.fields ?? col.schema ?? [];
+      const needs = await addFieldIfMissing(col.id, schema, { name: "theme" });
+      if (needs) {
+        const existing = schema.filter((f) => f.name !== "permissions"); // already added
+        // Also re-add permissions if not there yet (idempotent)
+        const needsPerms = await addFieldIfMissing(col.id, schema, { name: "permissions" });
+        const updated = [...schema];
+        if (needsPerms) updated.push({ name: "permissions", type: "json" });
+        updated.push({ name: "theme", type: "text" });
+        await api(`collections/${col.id}`, "PATCH", { fields: updated });
+        console.log("memberships: added 'theme' field.");
       }
     }
   }

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronDown, ChevronUp, KeyRound } from "lucide-react";
+import { ChevronDown, ChevronUp, KeyRound, Palette } from "lucide-react";
+import { THEMES, getTheme } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 
 function childEmail(name: string, householdId: string) {
@@ -67,7 +68,7 @@ function PermissionToggle({
   );
 }
 
-type MemberWithPerms = CachedMember & { permissions: Permissions };
+type MemberWithPerms = CachedMember & { permissions: Permissions; theme?: string };
 
 function expandedPermissions(m: CachedMember): MemberWithPerms {
   return { ...m, permissions: { ...DEFAULT_CHILD_PERMISSIONS, ...m.permissions } };
@@ -91,6 +92,7 @@ export default function MembersPage() {
   const [pinReset, setPinReset] = useState<Record<string, string>>({}); // membershipId → new PIN
   const [pinSaving, setPinSaving] = useState<string | null>(null);
   const [pinSuccess, setPinSuccess] = useState<string | null>(null);
+  const [themeSaving, setThemeSaving] = useState<string | null>(null);
 
   const isOwner = membership?.role === "owner";
 
@@ -109,6 +111,7 @@ export default function MembersPage() {
               role: m.role as string,
               hasPin: Boolean(m.pin),
               permissions: m.permissions,
+              theme: m.theme as string | undefined,
             })
           )
         )
@@ -151,6 +154,18 @@ export default function MembersPage() {
       alert(err instanceof Error ? err.message : "Failed to reset PIN.");
     } finally {
       setPinSaving(null);
+    }
+  }
+
+  async function saveTheme(member: MemberWithPerms, themeName: string) {
+    setThemeSaving(member.membershipId);
+    try {
+      await pb.collection("memberships").update(member.membershipId, { theme: themeName });
+      setMembers((prev) =>
+        prev.map((m) => m.membershipId === member.membershipId ? { ...m, theme: themeName } : m)
+      );
+    } finally {
+      setThemeSaving(null);
     }
   }
 
@@ -339,6 +354,34 @@ export default function MembersPage() {
                             : "Set PIN"}
                       </Button>
                     </div>
+                  </div>
+
+                  {/* Theme picker */}
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-black text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <Palette className="h-3 w-3" /> Theme
+                      {themeSaving === member.membershipId && <span className="text-[10px] font-normal">Saving…</span>}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {THEMES.map((t) => {
+                        const active = (member.theme ?? "violet") === t.name;
+                        return (
+                          <button
+                            key={t.name}
+                            onClick={() => saveTheme(member, t.name)}
+                            title={t.label}
+                            className={cn(
+                              "w-8 h-8 rounded-full transition-all",
+                              active ? "ring-2 ring-offset-2 ring-foreground scale-110" : "opacity-70 hover:opacity-100"
+                            )}
+                            style={{ background: t.gradient }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      The selected theme changes the app colours when this child is logged in.
+                    </p>
                   </div>
 
                   <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Page access</p>

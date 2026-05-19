@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { getClient, type Membership, type CachedMember, type PagePermission, type Permissions } from "@/lib/pocketbase";
+import { applyTheme } from "@/lib/themes";
 import type { RecordModel } from "pocketbase";
 
 interface AuthContextValue {
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const typed = m as unknown as Membership;
       setMembership(typed);
+      applyTheme(typed.theme);
 
       // Cache household + members list so the family login picker works offline
       const householdId = typed.household;
@@ -69,15 +71,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         filter: `household="${householdId}"`,
         expand: "user",
       });
-      const cached: CachedMember[] = allMembers.map((mem: any) => ({
-        membershipId: mem.id,
-        userId: mem.user as string,
-        name: (mem.expand?.user?.name as string) ?? "Unknown",
-        email: (mem.expand?.user?.email as string) ?? "",
-        role: mem.role as string,
-        hasPin: Boolean(mem.pin),
-        permissions: mem.permissions as Permissions | undefined,
-      }));
+      const pbUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL ?? "http://localhost:8090";
+      const cached: CachedMember[] = allMembers.map((mem: any) => {
+        const avatarFile = mem.expand?.user?.avatar as string | undefined;
+        const uid = mem.expand?.user?.id ?? mem.user;
+        return {
+          membershipId: mem.id,
+          userId: uid as string,
+          name: (mem.expand?.user?.name as string) ?? "Unknown",
+          email: (mem.expand?.user?.email as string) ?? "",
+          role: mem.role as string,
+          hasPin: Boolean(mem.pin),
+          permissions: mem.permissions as Permissions | undefined,
+          theme: mem.theme as string | undefined,
+          avatarUrl: avatarFile
+            ? `${pbUrl}/api/files/users/${uid}/${avatarFile}`
+            : undefined,
+        };
+      });
       cacheHousehold(householdId, householdName, cached);
     }
 
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     pb.authStore.clear();
     clearCache();
+    applyTheme(undefined); // reset to default violet
   }
 
   return (

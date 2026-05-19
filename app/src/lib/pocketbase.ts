@@ -44,6 +44,7 @@ export interface Household {
   id: string;
   name: string;
   invite_token: string;
+  custody_week?: "odd" | "even" | "";
 }
 
 export interface Membership {
@@ -53,6 +54,7 @@ export interface Membership {
   role: "owner" | "member";
   pin?: string;
   permissions?: Permissions;
+  theme?: string;
   expand?: { household?: Household; user?: User };
 }
 
@@ -64,6 +66,8 @@ export interface CachedMember {
   role: string;
   hasPin: boolean;
   permissions?: Permissions;
+  theme?: string;
+  avatarUrl?: string;
 }
 
 export interface Chore {
@@ -73,7 +77,7 @@ export interface Chore {
   type: "single" | "everyone" | "shared";
   scope?: "all" | "kids";
   assignee?: string;
-  recurrence: "none" | "daily" | "weekly" | "odd_week" | "even_week" | "fortnightly" | "monthly";
+  recurrence: "none" | "daily" | "weekly" | "my_week" | "odd_week" | "even_week" | "fortnightly" | "monthly";
   due_date?: string;
   completed: boolean;
   points: number;
