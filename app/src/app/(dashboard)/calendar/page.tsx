@@ -37,8 +37,10 @@ export default function CalendarPage() {
   const [allDay, setAllDay] = useState(true);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [gcalConnected, setGcalConnected] = useState(false);
 
-  useEffect(() => {
+  function fetchEvents() {
     if (!householdId) return;
     const from = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const last = daysInMonth(year, month);
@@ -48,7 +50,37 @@ export default function CalendarPage() {
         filter: `household="${householdId}" && start >= "${from}" && start <= "${to}T23:59:59"`,
       })
       .then((items) => setEvents(items as unknown as CalendarEvent[]));
+  }
+
+  useEffect(() => {
+    fetchEvents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, year, month]);
+
+  // Check Google Calendar connection and trigger initial sync
+  useEffect(() => {
+    if (!householdId) return;
+    fetch(`/api/google-calendar/status?householdId=${householdId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.connected && data.calendarId) {
+          setGcalConnected(true);
+          syncFromGoogle();
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [householdId]);
+
+  async function syncFromGoogle() {
+    if (!householdId) return;
+    setSyncing(true);
+    try {
+      await fetch(`/api/google-calendar/sync?householdId=${householdId}`);
+      fetchEvents();
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function prevMonth() {
     if (month === 0) { setYear((y) => y - 1); setMonth(11); }
@@ -80,14 +112,40 @@ export default function CalendarPage() {
       setEvents((prev) => [...prev, ev as unknown as CalendarEvent]);
       setTitle(""); setStart(""); setEnd(""); setAllDay(true); setNotes("");
       setShowForm(false);
+
+      // Push to Google Calendar (fire and forget — updates external_id in background)
+      if (gcalConnected) {
+        fetch("/api/google-calendar/event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            householdId,
+            plannerEventId: ev.id,
+            title: title.trim(),
+            start: startVal,
+            end: endVal,
+            allDay,
+            notes: notes.trim() || undefined,
+          }),
+        });
+      }
     } finally {
       setLoading(false);
     }
   }
 
   async function deleteEvent(id: string) {
+    const ev = events.find((e) => e.id === id);
     await pb.collection("calendar_events").delete(id);
     setEvents((prev) => prev.filter((e) => e.id !== id));
+
+    // Delete from Google Calendar if it was synced there
+    if (gcalConnected && ev?.external_id) {
+      fetch(
+        `/api/google-calendar/event?householdId=${householdId}&googleEventId=${ev.external_id}`,
+        { method: "DELETE" },
+      );
+    }
   }
 
   function getEventsForDay(day: number): CalendarEvent[] {
@@ -108,6 +166,17 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Calendar</h1>
         <div className="flex items-center gap-2">
+          {gcalConnected && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={syncFromGoogle}
+              disabled={syncing}
+              title="Sync with Google Calendar"
+            >
+              {syncing ? "Syncing…" : "↻ Sync"}
+            </Button>
+          )}
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={prevMonth}>←</Button>
             <span className="w-36 text-center text-sm text-muted-foreground">

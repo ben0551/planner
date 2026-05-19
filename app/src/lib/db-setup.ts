@@ -171,6 +171,17 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  // google_tokens: admin-only (no rules set), stores OAuth refresh tokens per household
+  await ensureCollection({
+    name: "google_tokens",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "refresh_token", type: "text" },
+      { name: "calendar_id", type: "text" },
+      { name: "sync_token", type: "text" },
+    ],
+  });
+
   // ── add fields missing from existing collections (upgrades) ──
 
   await addMissingFields("households", [{ name: "custody_week", type: "text" }]);
