@@ -141,6 +141,8 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "category", type: "text" },
       { name: "checked", type: "bool" },
       { name: "meal", ...rel(mealsId) },
+      { name: "added_by", ...rel(PB_USERS_ID) },
+      { name: "good_price", type: "text" },
     ],
   });
 
@@ -216,6 +218,10 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "ingredients", type: "text" },
   ]);
   await addMissingFields("goals", [{ name: "private", type: "bool" }]);
+  await addMissingFields("shopping_items", [
+    { name: "added_by", ...rel(PB_USERS_ID) },
+    { name: "good_price", type: "text" },
+  ]);
 
   // chores recurrence — add new option values if missing
   const choresCol = byName["chores"];

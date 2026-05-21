@@ -33,13 +33,15 @@ function SettingsContent() {
   const household = membership?.expand?.household;
   const isOwner = membership?.role === "owner";
 
-  const [custodyWeek, setCustodyWeek] = useState<CustodyWeek>(
-    (household?.custody_week as CustodyWeek) ?? ""
-  );
+  const [custodyWeek, setCustodyWeek] = useState<CustodyWeek>("");
   const [custodySaving, setCustodySaving] = useState(false);
   const [custodySaved, setCustodySaved] = useState(false);
   const [custodyError, setCustodyError] = useState("");
   const [migrating, setMigrating] = useState(false);
+
+  useEffect(() => {
+    setCustodyWeek((household?.custody_week as CustodyWeek) ?? "");
+  }, [household?.custody_week]);
   const [migrateLog, setMigrateLog] = useState<string[] | null>(null);
   const [migrateError, setMigrateError] = useState("");
 
