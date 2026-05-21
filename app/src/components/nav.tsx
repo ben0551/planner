@@ -24,6 +24,7 @@ import {
   LogOut,
   Trophy,
   ClipboardList,
+  StickyNote,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/shopping", label: "Shopping List",  icon: ShoppingCart,  emoji: "🛒" },
   { href: "/calendar", label: "Calendar",       icon: CalendarDays,  emoji: "📅" },
   { href: "/tasks",    label: "Tasks",          icon: ClipboardList, emoji: "📋" },
+  { href: "/notes",    label: "Notes",          icon: StickyNote,    emoji: "📝" },
   { href: "/rewards",  label: "Rewards",        icon: Trophy,        emoji: "🏆" },
   { href: "/settings", label: "Settings",       icon: Settings,      emoji: "⚙️" },
 ];

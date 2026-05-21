@@ -161,5 +161,28 @@ export interface Task {
   completed: boolean;
   assigned_to?: string;
   created_by?: string;
+  recurrence?: "none" | "daily" | "weekly" | "monthly";
+  last_completed?: string;
   expand?: { assigned_to?: User; created_by?: User };
+}
+
+export interface Note {
+  id: string;
+  household: string;
+  user?: string;
+  content: string;
+  color?: string;
+  pinned?: boolean;
+  created: string;
+}
+
+export interface ActivityEntry {
+  id: string;
+  household: string;
+  user?: string;
+  description: string;
+  entity_type?: string;
+  entity_id?: string;
+  created: string;
+  expand?: { user?: { id: string; name: string } };
 }

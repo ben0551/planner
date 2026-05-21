@@ -23,6 +23,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${nunito.variable} h-full antialiased`}>
       <body className="h-full">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('planner_dark')==='1')document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

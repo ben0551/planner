@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
 import { getClient, type Task } from "@/lib/pocketbase";
+import { logActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { CheckSquare, Square, Trash2, Plus, X, Pencil } from "lucide-react";
+import { CheckSquare, Square, Trash2, Plus, X, Pencil, RefreshCw } from "lucide-react";
 
 type Member = { id: string; name: string };
 type Filter = "pending" | "completed" | "all";
@@ -20,6 +21,24 @@ function dueBadge(due: string, completed: boolean) {
   if (due === today) return { label: "Due today", cls: "bg-amber-100 text-amber-700" };
   return null;
 }
+
+function isTaskDue(t: Task): boolean {
+  if (!t.recurrence || t.recurrence === "none") return !t.completed;
+  const today = new Date().toISOString().slice(0, 10);
+  const last = t.last_completed ?? "";
+  if (t.recurrence === "daily") return last < today;
+  if (t.recurrence === "weekly") {
+    const d = new Date(); const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return last < d.toISOString().slice(0, 10);
+  }
+  if (t.recurrence === "monthly") return last.slice(0, 7) < today.slice(0, 7);
+  return !t.completed;
+}
+
+const RECURRENCE_LABELS: Record<string, string> = {
+  daily: "Daily", weekly: "Weekly", monthly: "Monthly",
+};
 
 export default function TasksPage() {
   const { householdId, user, membership } = useAuth();
@@ -36,9 +55,10 @@ export default function TasksPage() {
   const [newDue, setNewDue] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
+  const [newRecurrence, setNewRecurrence] = useState<"none" | "daily" | "weekly" | "monthly">("none");
   const [saving, setSaving] = useState(false);
 
-  type EditDraft = { id: string; title: string; due: string; notes: string; assignee: string };
+  type EditDraft = { id: string; title: string; due: string; notes: string; assignee: string; recurrence: "none" | "daily" | "weekly" | "monthly" };
   const [editing, setEditing] = useState<EditDraft | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -49,6 +69,7 @@ export default function TasksPage() {
       due: t.due_date ?? "",
       notes: t.notes ?? "",
       assignee: t.assigned_to ?? "",
+      recurrence: t.recurrence ?? "none",
     });
   }
 
@@ -61,11 +82,12 @@ export default function TasksPage() {
         due_date: editing.due || null,
         notes: editing.notes.trim() || null,
         assigned_to: editing.assignee || null,
+        recurrence: editing.recurrence,
       });
       setTasks((prev) =>
         prev.map((t) =>
           t.id === editing.id
-            ? { ...t, title: editing.title.trim(), due_date: editing.due, notes: editing.notes.trim(), assigned_to: editing.assignee }
+            ? { ...t, title: editing.title.trim(), due_date: editing.due, notes: editing.notes.trim(), assigned_to: editing.assignee, recurrence: editing.recurrence }
             : t,
         ),
       );
@@ -77,7 +99,6 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!householdId) return;
-    // No expand — look up names from the members list to avoid viewRule issues
     pb.collection("tasks")
       .getFullList({ filter: `household="${householdId}"`, sort: "due_date" })
       .then((items) => setTasks(items as unknown as Task[]))
@@ -97,14 +118,16 @@ export default function TasksPage() {
 
   function isVisible(t: Task) {
     if (isOwner) return true;
-    if (!t.assigned_to) return true; // unassigned = everyone sees it
+    if (!t.assigned_to) return true;
     return t.assigned_to === userId || t.created_by === userId;
   }
 
   const visible = tasks.filter(isVisible);
-  const filtered = visible.filter((t) =>
-    filter === "all" ? true : filter === "pending" ? !t.completed : t.completed,
-  );
+  const filtered = visible.filter((t) => {
+    if (filter === "all") return true;
+    if (filter === "pending") return isTaskDue(t);
+    return !isTaskDue(t);
+  });
 
   async function addTask() {
     if (!newTitle.trim() || !householdId) return;
@@ -118,9 +141,10 @@ export default function TasksPage() {
         assigned_to: newAssignee || undefined,
         created_by: userId,
         completed: false,
+        recurrence: newRecurrence,
       });
       setTasks((prev) => [...prev, rec as unknown as Task]);
-      setNewTitle(""); setNewDue(""); setNewNotes(""); setNewAssignee("");
+      setNewTitle(""); setNewDue(""); setNewNotes(""); setNewAssignee(""); setNewRecurrence("none");
       setShowForm(false);
     } finally {
       setSaving(false);
@@ -128,8 +152,16 @@ export default function TasksPage() {
   }
 
   async function toggleComplete(t: Task) {
-    const updated = await pb.collection("tasks").update(t.id, { completed: !t.completed });
-    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, completed: !t.completed } : x)));
+    const isRecurring = t.recurrence && t.recurrence !== "none";
+    const today = new Date().toISOString().slice(0, 10);
+    const patch = isRecurring
+      ? { last_completed: isTaskDue(t) ? today : "", completed: true }
+      : { completed: !t.completed };
+    await pb.collection("tasks").update(t.id, patch);
+    setTasks((prev) => prev.map((x) => x.id === t.id ? { ...x, ...patch } : x));
+    if (!t.completed || isRecurring) {
+      logActivity(householdId!, userId, `✅ ${t.title} completed`, "task", t.id);
+    }
   }
 
   async function deleteTask(id: string) {
@@ -137,7 +169,7 @@ export default function TasksPage() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
-  const pendingCount = visible.filter((t) => !t.completed).length;
+  const pendingCount = visible.filter((t) => isTaskDue(t)).length;
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
@@ -190,6 +222,19 @@ export default function TasksPage() {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Repeat</Label>
+            <select
+              value={newRecurrence}
+              onChange={(e) => setNewRecurrence(e.target.value as any)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="none">No repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="task-notes">Notes (optional)</Label>
@@ -266,6 +311,19 @@ export default function TasksPage() {
                     </select>
                   </div>
                 </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Repeat</Label>
+                  <select
+                    value={editing.recurrence}
+                    onChange={(e) => setEditing({ ...editing, recurrence: e.target.value as any })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  >
+                    <option value="none">No repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
                 <Input
                   value={editing.notes}
                   onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
@@ -287,31 +345,40 @@ export default function TasksPage() {
             );
           }
 
-          const badge = dueBadge(t.due_date, t.completed);
+          const badge = dueBadge(t.due_date, !isTaskDue(t));
           const assigneeName = t.assigned_to
             ? members.find((m) => m.id === t.assigned_to)?.name
             : undefined;
+          const isDone = !isTaskDue(t);
 
           return (
             <div
               key={t.id}
               className={cn(
                 "flex items-start gap-3 rounded-2xl border bg-white shadow-sm px-4 py-3 group",
-                t.completed && "opacity-60",
+                isDone && "opacity-60",
               )}
             >
               <button
                 onClick={() => toggleComplete(t)}
                 className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
               >
-                {t.completed ? (
+                {isDone ? (
                   <CheckSquare className="h-5 w-5 text-primary" />
                 ) : (
                   <Square className="h-5 w-5" />
                 )}
               </button>
               <div className="flex-1 min-w-0">
-                <p className={cn("text-sm font-medium", t.completed && "line-through")}>{t.title}</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className={cn("text-sm font-medium", isDone && "line-through")}>{t.title}</p>
+                  {t.recurrence && t.recurrence !== "none" && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-semibold">
+                      <RefreshCw className="h-2.5 w-2.5" />
+                      {RECURRENCE_LABELS[t.recurrence]}
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                   {t.due_date && (
                     <span className="text-xs text-muted-foreground">

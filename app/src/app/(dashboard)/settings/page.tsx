@@ -6,7 +6,7 @@ import { getClient } from "@/lib/pocketbase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, UserPlus, ChevronRight, CalendarRange, Database, CalendarDays } from "lucide-react";
+import { Users, UserPlus, ChevronRight, CalendarRange, Database, CalendarDays, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type CustodyWeek = "odd" | "even" | "";
@@ -32,6 +32,17 @@ function SettingsContent() {
   const pb = getClient();
   const household = membership?.expand?.household;
   const isOwner = membership?.role === "owner";
+
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  function toggleDark() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("planner_dark", next ? "1" : "0");
+  }
 
   const [custodyWeek, setCustodyWeek] = useState<CustodyWeek>("");
   const [custodySaving, setCustodySaving] = useState(false);
@@ -156,6 +167,26 @@ function SettingsContent() {
         <div className="px-4 py-3 flex flex-col gap-1">
           <p className="text-sm font-semibold">{user?.name as string}</p>
           <p className="text-xs text-muted-foreground">{user?.email as string}</p>
+        </div>
+      </div>
+
+      {/* Dark mode */}
+      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {dark ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-primary" />}
+            <span className="text-sm font-semibold">Dark mode</span>
+          </div>
+          <button
+            onClick={toggleDark}
+            className={cn(
+              "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+              dark ? "bg-primary" : "bg-muted"
+            )}
+          >
+            <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+              dark ? "translate-x-6" : "translate-x-1")} />
+          </button>
         </div>
       </div>
 

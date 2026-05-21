@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth, usePermission } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion } from "@/lib/pocketbase";
+import { logActivity } from "@/lib/activity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -198,6 +199,7 @@ export default function ChoresPage() {
         chore: chore.id, user: kidId, date: dateStr, points: chore.points ?? 0,
       });
       setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+      logActivity(householdId!, kidId, `✅ ${chore.title} completed`, "chore", chore.id);
     }
   }
 
@@ -219,6 +221,7 @@ export default function ChoresPage() {
         chore: chore.id, user: user.id, date: dateStr, points: late ? 0 : (chore.points ?? 0),
       });
       setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+      logActivity(householdId!, user.id, `✅ ${chore.title} completed`, "chore", chore.id);
     }
   }
 

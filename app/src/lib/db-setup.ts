@@ -186,6 +186,28 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  await ensureCollection({
+    name: "notes",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "user", ...rel(PB_USERS_ID) },
+      { name: "content", type: "text", required: true },
+      { name: "color", type: "text" },
+      { name: "pinned", type: "bool" },
+    ],
+  });
+
+  await ensureCollection({
+    name: "activity_log",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "user", ...rel(PB_USERS_ID) },
+      { name: "description", type: "text", required: true },
+      { name: "entity_type", type: "text" },
+      { name: "entity_id", type: "text" },
+    ],
+  });
+
   // google_tokens: admin-only (no rules set), stores OAuth refresh tokens per household
   await ensureCollection({
     name: "google_tokens",
@@ -218,6 +240,10 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "ingredients", type: "text" },
   ]);
   await addMissingFields("goals", [{ name: "private", type: "bool" }]);
+  await addMissingFields("tasks", [
+    { name: "recurrence", ...sel(["none", "daily", "weekly", "monthly"]) },
+    { name: "last_completed", type: "text" },
+  ]);
   await addMissingFields("shopping_items", [
     { name: "added_by", ...rel(PB_USERS_ID) },
     { name: "good_price", type: "text" },
@@ -265,7 +291,7 @@ export async function ensureSchema(): Promise<string[]> {
 
   // all app collections: allow authenticated users
   const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events", "tasks"];
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events", "tasks", "notes", "activity_log"];
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;
