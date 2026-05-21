@@ -40,13 +40,11 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!householdId) return;
+    // No expand — look up names from the members list to avoid viewRule issues
     pb.collection("tasks")
-      .getFullList({
-        filter: `household="${householdId}"`,
-        sort: "due_date,created",
-        expand: "assigned_to,created_by",
-      })
-      .then((items) => setTasks(items as unknown as Task[]));
+      .getFullList({ filter: `household="${householdId}"`, sort: "due_date,created" })
+      .then((items) => setTasks(items as unknown as Task[]))
+      .catch(() => {});
     pb.collection("memberships")
       .getFullList({ filter: `household="${householdId}"`, expand: "user" })
       .then((ms) =>
@@ -56,7 +54,8 @@ export default function TasksPage() {
             name: m.expand?.user?.name ?? "Member",
           })),
         ),
-      );
+      )
+      .catch(() => {});
   }, [householdId]);
 
   function isVisible(t: Task) {
@@ -195,7 +194,9 @@ export default function TasksPage() {
         )}
         {filtered.map((t) => {
           const badge = dueBadge(t.due_date, t.completed);
-          const assigneeName = t.expand?.assigned_to?.name;
+          const assigneeName = t.assigned_to
+            ? members.find((m) => m.id === t.assigned_to)?.name
+            : undefined;
           return (
             <div
               key={t.id}

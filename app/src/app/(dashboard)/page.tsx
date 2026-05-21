@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type Chore, type ChoreCompletion, type CalendarEvent } from "@/lib/pocketbase";
+import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task } from "@/lib/pocketbase";
 import Link from "next/link";
-import { CheckCircle2, Star } from "lucide-react";
+import { CheckCircle2, Star, Square, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CHORE_EMOJI: Record<string, string> = {
@@ -68,6 +68,62 @@ function eventBorderColor(id: string) {
   return EVENT_BORDER_COLORS[h % EVENT_BORDER_COLORS.length];
 }
 
+function DueTasksSection({
+  tasks,
+  loading,
+  pb,
+  onToggle,
+}: {
+  tasks: Task[];
+  loading: boolean;
+  pb: ReturnType<typeof getClient>;
+  onToggle: (id: string) => void;
+}) {
+  async function complete(t: Task) {
+    await pb.collection("tasks").update(t.id, { completed: true });
+    onToggle(t.id);
+  }
+
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📋</span>
+          <h2 className="font-bold text-sm">Due tasks</h2>
+        </div>
+        <Link href="/tasks" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
+      </div>
+      {loading ? (
+        <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
+      ) : (
+        <div className="divide-y divide-border">
+          {tasks.map((t) => {
+            const today = new Date().toISOString().substring(0, 10);
+            const overdue = t.due_date && t.due_date < today;
+            return (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                <button onClick={() => complete(t)} className="shrink-0 text-muted-foreground hover:text-primary transition-colors">
+                  <Square className="h-4 w-4" />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{t.title}</p>
+                  {t.notes && <p className="text-xs text-muted-foreground truncate">{t.notes}</p>}
+                </div>
+                {overdue && (
+                  <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full shrink-0">Overdue</span>
+                )}
+                {t.due_date === today && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0">Today</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user, membership, householdId } = useAuth();
   const pb = getClient();
@@ -78,6 +134,7 @@ export default function DashboardPage() {
   const [weekPoints, setWeekPoints] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
+  const [dueTasks, setDueTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
   const firstName = (user?.name as string)?.split(" ")[0] ?? "there";
@@ -95,7 +152,7 @@ export default function DashboardPage() {
       weekStart.setDate(now.getDate() - dayOfWeek);
       const weekStartStr = weekStart.toISOString().slice(0, 10);
 
-      const [chores, myWeekCompletions, allMyCompletions, events] = await Promise.all([
+      const [chores, myWeekCompletions, allMyCompletions, events, tasks] = await Promise.all([
         pb.collection("chores").getFullList<Chore>({
           filter: `household="${householdId}"`,
           expand: "assignee",
@@ -110,6 +167,10 @@ export default function DashboardPage() {
           filter: `household="${householdId}" && start >= "${today}"`,
           sort: "start",
         }),
+        pb.collection("tasks").getFullList<Task>({
+          filter: `household="${householdId}" && due_date <= "${today}" && completed = false`,
+          sort: "due_date",
+        }).catch(() => [] as Task[]),
       ]);
 
       const due = chores.filter((c) => {
@@ -120,12 +181,20 @@ export default function DashboardPage() {
       const wPts = myWeekCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
       const allPts = allMyCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
 
+      // Tasks visible to this user: owner sees all; others see unassigned + assigned to them + created by them
+      const visibleTasks = tasks.filter((t) => {
+        if (membership?.role === "owner") return true;
+        if (!t.assigned_to) return true;
+        return t.assigned_to === user!.id || t.created_by === user!.id;
+      });
+
       setTodayChores(due);
       setCompletions(myWeekCompletions);
       setWeeklyCompleted(myWeekCompletions.length);
       setWeekPoints(wPts);
       setTotalPoints(allPts);
       setUpcomingEvents(events.slice(0, 4));
+      setDueTasks(visibleTasks);
       setLoading(false);
     }
 
@@ -192,6 +261,13 @@ export default function DashboardPage() {
             <Link href="/calendar" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
           </div>
         </div>
+      )}
+
+      {/* Due tasks */}
+      {(loading || dueTasks.length > 0) && (
+        <DueTasksSection tasks={dueTasks} loading={loading} pb={pb} onToggle={(id) =>
+          setDueTasks((prev) => prev.filter((t) => t.id !== id))
+        } />
       )}
 
       {/* Today's chores */}
