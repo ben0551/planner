@@ -47,6 +47,38 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isoWeekNumber(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d.getTime() - jan4.getTime()) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7);
+}
+
+function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
+  if (chore.recurrence === "daily") return true;
+  if (chore.recurrence === "weekly") return true;
+  if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
+  if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
+  if (chore.recurrence === "my_week") {
+    if (!custodyWeek) return false;
+    const weekNum = isoWeekNumber(new Date(dateStr));
+    return custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0;
+  }
+  if (chore.recurrence === "fortnightly") {
+    if (!chore.due_date) return true;
+    const ref = new Date(chore.due_date);
+    const target = new Date(dateStr);
+    const diffWeeks = Math.round((target.getTime() - ref.getTime()) / (7 * 86400000));
+    return diffWeeks % 2 === 0;
+  }
+  if (chore.recurrence === "monthly") {
+    if (!chore.due_date) return true;
+    return new Date(chore.due_date).getDate() === new Date(dateStr).getDate();
+  }
+  return chore.due_date ? chore.due_date.startsWith(dateStr) : false;
+}
+
 function formatEventDate(start: string) {
   const d = new Date(start);
   const today = new Date();
@@ -173,10 +205,8 @@ export default function DashboardPage() {
         }).catch(() => [] as Task[]),
       ]);
 
-      const due = chores.filter((c) => {
-        if (c.recurrence === "none" && c.due_date) return c.due_date.slice(0, 10) === today;
-        return c.recurrence !== "none";
-      }).slice(0, 5);
+      const custodyWeek = (membership?.expand?.household?.custody_week ?? "") as "odd" | "even" | "";
+      const due = chores.filter((c) => isDueOnDate(c, today, custodyWeek)).slice(0, 5);
 
       const wPts = myWeekCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
       const allPts = allMyCompletions.reduce((s, c) => s + (c.points ?? 0), 0);

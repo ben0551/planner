@@ -79,7 +79,7 @@ export default function TasksPage() {
     if (!householdId) return;
     // No expand — look up names from the members list to avoid viewRule issues
     pb.collection("tasks")
-      .getFullList({ filter: `household="${householdId}"`, sort: "due_date,created" })
+      .getFullList({ filter: `household="${householdId}"`, sort: "due_date" })
       .then((items) => setTasks(items as unknown as Task[]))
       .catch(() => {});
     pb.collection("memberships")

@@ -114,6 +114,8 @@ export interface ShoppingItem {
   category?: string;
   checked: boolean;
   meal?: string;
+  added_by?: string;
+  good_price?: string;
 }
 
 export interface Goal {
