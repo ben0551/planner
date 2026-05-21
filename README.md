@@ -21,13 +21,26 @@ A family household management app built for real daily use. Covers chores, meals
 
 ### Shopping
 - Shared shopping list across the household
-- Items have categories and optional quantities
+- Items have quantity, category, and an optional **good price** target (green badge shown in-store)
+- **Added by** attribution — shows which member added each item (useful for reviewing kid suggestions)
+- Inline editing for quantity, category, and good price
+- Sort by: Category / Name / Added by
 - Tick items off as you shop; clear checked items in bulk
 - Items can be linked to a specific meal
+
+### Tasks
+- Planner-native tasks with optional due dates and member assignment
+- Recurrence: daily, weekly, monthly — auto-resets at the start of each period
+- Due/overdue badges; inline editing (title, due date, assignee, notes, recurrence)
+- Visibility: owner sees all; members see unassigned tasks + their own
+- Filter tabs: pending / completed / all
+- Tasks surface on the calendar grid and in the Today dashboard widget
 
 ### Calendar
 - Family calendar with manual event creation
 - All-day events and timed events supported
+- **Google Calendar two-way sync** — connect once via OAuth; events push/pull automatically
+- Incremental sync via Google's `syncToken` (full re-sync on 410 Gone)
 
 ### Rewards
 - Points leaderboard showing all household members ranked by total points
@@ -36,15 +49,31 @@ A family household management app built for real daily use. Covers chores, meals
 - Goals can be marked private — only visible to the owner and the specific child
 - Owner can mark goals as achieved, edit, or delete them
 
+### Notes / Pinboard
+- Sticky-note style cards with 6 colour choices
+- Pin important notes to surface them on the dashboard
+- Per-member authorship
+
 ### Kid accounts
 - Kids log in with a 4-digit PIN — no email or password required
 - On the login screen kids tap "I'm a kid", select their household, and enter their PIN
 - Per-page permissions: owner controls what each kid can read or edit
 - Kid accounts have their own theme colour
 
+### Dashboard
+- Personalised greeting with time-of-day awareness
+- **Progress ring** — SVG arc showing today's chore completion (done / total)
+- **Streak leaderboard** — rolling 30-day chore streak per member with medal ranks
+- Due tasks widget (overdue + due today, with one-tap complete)
+- Upcoming calendar events
+- Pinned notes widget
+- **Activity feed** — recent household actions (chore completions, task completions)
+- Weekly points summary + all-time total
+
 ### Household management
 - Invite family members via a shareable link
 - Custody schedule setting (odd/even week) for split-custody households
+- **Dark mode** toggle — persists across sessions, flash-free (reads from localStorage before hydration)
 - Sync Database button to apply schema updates after app upgrades
 
 ---
@@ -211,6 +240,10 @@ After pulling a new version of Planner, go to **Settings → Sync Database**. Th
 | `NEXT_PUBLIC_POCKETBASE_URL` | Browser + server | Full URL to your PocketBase instance |
 | `PB_ADMIN_EMAIL` | Server-side only | PocketBase superuser email |
 | `PB_ADMIN_PASSWORD` | Server-side only | PocketBase superuser password |
+| `GOOGLE_CLIENT_ID` | Server-side only | Google OAuth client ID (Calendar sync) |
+| `GOOGLE_CLIENT_SECRET` | Server-side only | Google OAuth client secret (Calendar sync) |
+| `APP_URL` | Server-side only | Public app URL — used as the Google OAuth redirect URI |
+| `DOMAIN` | Docker / Traefik | Your domain name, e.g. `planner.example.com` |
 
 `PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD` are only used by server-side API routes (PIN reset, kid login lookup, schema migration). They are never sent to the browser.
 
