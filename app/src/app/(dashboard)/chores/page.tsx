@@ -130,9 +130,11 @@ const defaultForm = (): ChoreFormState => ({
 });
 
 function formFromChore(c: Chore): ChoreFormState {
+  const isKidsOnly = c.type !== "everyone" && c.scope === "kids" && !c.assignee;
   return {
     title: c.title, type: c.type, scope: c.scope ?? "all",
-    assignee: c.assignee ?? "", recurrence: c.recurrence,
+    assignee: isKidsOnly ? "__kids__" : (c.assignee ?? ""),
+    recurrence: c.recurrence,
     dueDate: c.due_date ?? "", points: c.points ?? 1,
     deadlineTime: c.deadline_time ?? "",
   };
@@ -248,18 +250,20 @@ export default function ChoresPage() {
     if (!form.title.trim() || !householdId) return;
     setSaving(true);
     try {
+      const isKidsOnly = form.type !== "everyone" && form.assignee === "__kids__";
       const payload: Record<string, unknown> = {
         household: householdId,
         title: form.title.trim(),
         type: form.type,
         recurrence: form.recurrence,
         points: form.points,
+        scope: form.type === "everyone" ? form.scope : isKidsOnly ? "kids" : "all",
+        assignee: (form.type !== "everyone" && form.assignee && !isKidsOnly) ? form.assignee : null,
       };
-      if (form.type === "everyone") payload.scope = form.scope;
-      if (form.type !== "everyone" && form.assignee) payload.assignee = form.assignee;
       if (form.recurrence === "none" && form.dueDate) payload.due_date = form.dueDate;
       else if (form.recurrence !== "none") payload.due_date = null;
       if (form.deadlineTime) payload.deadline_time = form.deadlineTime;
+      else payload.deadline_time = null;
       if (editingId) {
         await pb.collection("chores").update(editingId, payload);
         const full = await pb.collection("chores").getOne(editingId, { expand: "assignee" });
@@ -285,14 +289,16 @@ export default function ChoresPage() {
     .sort((a, b) => b.points - a.points);
   const maxPoints = Math.max(1, ...scoreboard.map(s => s.points));
 
+  const kidMembers = members.filter(m => m.hasPin);
+  const isKidUser = members.find(m => m.id === user?.id)?.hasPin ?? false;
+
   const activeChores = chores.filter(c => {
-    // hide one-off chores whose due date is before this week
     if (c.recurrence === "none" && c.due_date && c.due_date < toDateStr(weekStart)) return false;
-    // hide other kids' assigned chores
     if (!isOwner && c.assignee && c.assignee !== user?.id) return false;
+    // hide kids-only single/shared chores from non-kid adults
+    if (!isOwner && !isKidUser && c.scope === "kids" && c.type !== "everyone") return false;
     return true;
   });
-  const kidMembers = members.filter(m => m.hasPin);
 
   const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric" })}`;
 
@@ -435,7 +441,7 @@ export default function ChoresPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold truncate">{chore.title}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {chore.type === "everyone" ? "everyone" : chore.assignee ? (members.find(m => m.id === chore.assignee)?.name ?? "?") : "anyone"}
+                          {chore.type === "everyone" ? "everyone" : chore.assignee ? (members.find(m => m.id === chore.assignee)?.name ?? "?") : chore.scope === "kids" ? "kids only" : "anyone"}
                         </p>
                       </div>
                       <div className="flex gap-2 flex-wrap justify-end">
@@ -545,6 +551,7 @@ export default function ChoresPage() {
               <select value={form.assignee} onChange={e => setField("assignee", e.target.value)}
                 className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
                 <option value="">Anyone</option>
+                <option value="__kids__">Kids only</option>
                 {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
