@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { CheckSquare, Square, Trash2, Plus, X } from "lucide-react";
+import { CheckSquare, Square, Trash2, Plus, X, Pencil } from "lucide-react";
 
 type Member = { id: string; name: string };
 type Filter = "pending" | "completed" | "all";
@@ -37,6 +37,43 @@ export default function TasksPage() {
   const [newNotes, setNewNotes] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
   const [saving, setSaving] = useState(false);
+
+  type EditDraft = { id: string; title: string; due: string; notes: string; assignee: string };
+  const [editing, setEditing] = useState<EditDraft | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  function startEdit(t: Task) {
+    setEditing({
+      id: t.id,
+      title: t.title,
+      due: t.due_date ?? "",
+      notes: t.notes ?? "",
+      assignee: t.assigned_to ?? "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editing || !editing.title.trim()) return;
+    setEditSaving(true);
+    try {
+      await pb.collection("tasks").update(editing.id, {
+        title: editing.title.trim(),
+        due_date: editing.due || null,
+        notes: editing.notes.trim() || null,
+        assigned_to: editing.assignee || null,
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === editing.id
+            ? { ...t, title: editing.title.trim(), due_date: editing.due, notes: editing.notes.trim(), assigned_to: editing.assignee }
+            : t,
+        ),
+      );
+      setEditing(null);
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!householdId) return;
@@ -193,10 +230,68 @@ export default function TasksPage() {
           </p>
         )}
         {filtered.map((t) => {
+          const isEditing = editing?.id === t.id;
+          const canEdit = isOwner || t.created_by === userId;
+
+          if (isEditing && editing) {
+            return (
+              <div key={t.id} className="rounded-2xl border bg-white shadow-sm px-4 py-3 flex flex-col gap-3">
+                <Input
+                  value={editing.title}
+                  onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                  placeholder="Task title"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && saveEdit()}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Label>Due date</Label>
+                    <Input
+                      type="date"
+                      value={editing.due}
+                      onChange={(e) => setEditing({ ...editing, due: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Assign to</Label>
+                    <select
+                      value={editing.assignee}
+                      onChange={(e) => setEditing({ ...editing, assignee: e.target.value })}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    >
+                      <option value="">Everyone</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <Input
+                  value={editing.notes}
+                  onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                  placeholder="Notes (optional)"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveEdit} disabled={editSaving || !editing.title.trim()}>
+                    {editSaving ? "Saving…" : "Save"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+                  {canEdit && (
+                    <Button size="sm" variant="ghost" className="ml-auto text-destructive hover:text-destructive"
+                      onClick={() => { deleteTask(t.id); setEditing(null); }}>
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
           const badge = dueBadge(t.due_date, t.completed);
           const assigneeName = t.assigned_to
             ? members.find((m) => m.id === t.assigned_to)?.name
             : undefined;
+
           return (
             <div
               key={t.id}
@@ -236,12 +331,12 @@ export default function TasksPage() {
                 </div>
                 {t.notes && <p className="text-xs text-muted-foreground mt-1">{t.notes}</p>}
               </div>
-              {(isOwner || t.created_by === userId) && (
+              {canEdit && (
                 <button
-                  onClick={() => deleteTask(t.id)}
-                  className="hidden group-hover:flex shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5"
+                  onClick={() => startEdit(t)}
+                  className="hidden group-hover:flex shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Pencil className="h-4 w-4" />
                 </button>
               )}
             </div>
