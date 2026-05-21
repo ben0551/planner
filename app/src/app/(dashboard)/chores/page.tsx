@@ -75,7 +75,10 @@ function isoWeekNumber(date: Date): number {
 
 function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
   if (chore.recurrence === "daily") return true;
-  if (chore.recurrence === "weekly") return true;
+  if (chore.recurrence === "weekly") {
+    if (!chore.due_date) return true;
+    return new Date(dateStr + "T12:00:00").getDay() === new Date(chore.due_date + "T12:00:00").getDay();
+  }
   if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
   if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
   if (chore.recurrence === "my_week") {
@@ -120,14 +123,22 @@ interface ChoreFormState {
   assignee: string;
   recurrence: Chore["recurrence"];
   dueDate: string;
+  weekDay: string;
   points: number;
   deadlineTime: string;
 }
 
 const defaultForm = (): ChoreFormState => ({
   title: "", type: "single", scope: "all", assignee: "",
-  recurrence: "daily", dueDate: "", points: 1, deadlineTime: "",
+  recurrence: "daily", dueDate: "", weekDay: "", points: 1, deadlineTime: "",
 });
+
+function nearestPastWeekday(day: number): string {
+  const d = new Date();
+  const diff = (d.getDay() - day + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function formFromChore(c: Chore): ChoreFormState {
   const isKidsOnly = c.type !== "everyone" && c.scope === "kids" && !c.assignee;
@@ -135,7 +146,11 @@ function formFromChore(c: Chore): ChoreFormState {
     title: c.title, type: c.type, scope: c.scope ?? "all",
     assignee: isKidsOnly ? "__kids__" : (c.assignee ?? ""),
     recurrence: c.recurrence,
-    dueDate: c.due_date ?? "", points: c.points ?? 1,
+    dueDate: c.due_date ?? "",
+    weekDay: (c.recurrence === "weekly" && c.due_date)
+      ? String(new Date(c.due_date + "T12:00:00").getDay())
+      : "",
+    points: c.points ?? 1,
     deadlineTime: c.deadline_time ?? "",
   };
 }
@@ -261,6 +276,7 @@ export default function ChoresPage() {
         assignee: (form.type !== "everyone" && form.assignee && !isKidsOnly) ? form.assignee : null,
       };
       if (form.recurrence === "none" && form.dueDate) payload.due_date = form.dueDate;
+      else if (form.recurrence === "weekly" && form.weekDay !== "") payload.due_date = nearestPastWeekday(parseInt(form.weekDay));
       else if (form.recurrence !== "none") payload.due_date = null;
       if (form.deadlineTime) payload.deadline_time = form.deadlineTime;
       else payload.deadline_time = null;
@@ -567,6 +583,22 @@ export default function ChoresPage() {
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Due date</Label>
                 <Input type="date" value={form.dueDate} onChange={e => setField("dueDate", e.target.value)} />
+              </div>
+            )}
+            {form.recurrence === "weekly" && (
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs">Which day?</Label>
+                <select value={form.weekDay} onChange={e => setField("weekDay", e.target.value)}
+                  className="h-9 rounded-xl border border-input bg-background px-3 text-sm font-medium">
+                  <option value="">Every day</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                  <option value="0">Sunday</option>
+                </select>
               </div>
             )}
           </div>

@@ -57,7 +57,10 @@ function isoWeekNumber(date: Date): number {
 
 function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
   if (chore.recurrence === "daily") return true;
-  if (chore.recurrence === "weekly") return true;
+  if (chore.recurrence === "weekly") {
+    if (!chore.due_date) return true;
+    return new Date(dateStr + "T12:00:00").getDay() === new Date(chore.due_date + "T12:00:00").getDay();
+  }
   if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
   if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
   if (chore.recurrence === "my_week") {
