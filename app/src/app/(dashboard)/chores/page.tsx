@@ -457,7 +457,7 @@ export default function ChoresPage() {
             {adminDayChores.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No chores on this day.</p>
             ) : (
-              <div className="rounded-2xl bg-white border border-border overflow-hidden divide-y">
+              <div className="rounded-2xl bg-card border border-border overflow-hidden divide-y">
                 {adminDayChores.map(chore => {
                   const scopeKids = chore.type === "everyone"
                     ? (chore.scope === "kids" ? kidMembers : members)
@@ -506,7 +506,7 @@ export default function ChoresPage() {
 
       {/* Scoreboard */}
       {!adminView && scoreboard.some(m => m.points > 0) && (
-        <div className="rounded-3xl overflow-hidden shadow-sm border border-border bg-white">
+        <div className="rounded-3xl overflow-hidden shadow-sm border border-border bg-card">
           <div className="px-4 pt-3 pb-1 flex items-center gap-2">
             <Trophy className="h-4 w-4 text-amber-500" />
             <span className="text-sm font-black">This week</span>
@@ -528,7 +528,7 @@ export default function ChoresPage() {
 
       {/* Add / Edit form */}
       {!adminView && showForm && (
-        <div className="rounded-3xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
+        <div className="rounded-3xl bg-card border border-border shadow-sm p-4 flex flex-col gap-3">
           <p className="font-black text-sm">{editingId ? "Edit chore" : "New chore"}</p>
 
           <div className="flex flex-col gap-1">
@@ -673,7 +673,7 @@ export default function ChoresPage() {
                   {/* Day header */}
                   <div className={cn(
                     "rounded-2xl p-2 text-center",
-                    isToday ? "bg-primary text-primary-foreground" : "bg-white border border-border"
+                    isToday ? "bg-primary text-primary-foreground" : "bg-card border border-border"
                   )}>
                     <p className={cn("text-[10px] font-black uppercase tracking-wide",
                       isToday ? "text-primary-foreground/70" : "text-muted-foreground")}>{DAY_NAMES[i]}</p>
@@ -718,7 +718,7 @@ export default function ChoresPage() {
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : isToday
                           ? "bg-primary/10 text-primary"
-                          : "bg-white border border-border text-muted-foreground"
+                          : "bg-card border border-border text-muted-foreground"
                     )}>
                     <span className="text-[10px]">{DAY_NAMES[i]}</span>
                     <span className="text-lg leading-tight">{date.getDate()}</span>

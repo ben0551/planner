@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (setupRequired) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
-        <div className="w-full max-w-sm bg-white rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-4">
+        <div className="w-full max-w-sm bg-card rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-4">
           <div>
             <h1 className="text-lg font-bold">Create your household</h1>
             <p className="text-sm text-muted-foreground mt-1">

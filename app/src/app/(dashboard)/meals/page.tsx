@@ -389,7 +389,7 @@ export default function MealsPage() {
         </div>
 
         {/* Import from web */}
-        <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-2">
+        <div className="rounded-2xl bg-card border border-border shadow-sm p-4 flex flex-col gap-2">
           <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Import from web</p>
           <div className="flex gap-2">
             <Input
@@ -413,7 +413,7 @@ export default function MealsPage() {
 
         {/* Add / Edit form */}
         {showRecipeForm && (
-          <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
+          <div className="rounded-2xl bg-card border border-border shadow-sm p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="font-black text-sm">{editingRecipe ? "Edit recipe" : "New recipe"}</p>
               <button onClick={closeRecipeForm}><X className="h-4 w-4 text-muted-foreground" /></button>
@@ -494,7 +494,7 @@ export default function MealsPage() {
 
         {/* Search + filter */}
         <div className="flex gap-2 flex-wrap">
-          <div className="flex items-center gap-2 rounded-xl border border-input bg-white px-3 py-2 flex-1 min-w-40">
+          <div className="flex items-center gap-2 rounded-xl border border-input bg-card px-3 py-2 flex-1 min-w-40">
             <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)}
               placeholder="Search recipes…" className="flex-1 text-sm outline-none bg-transparent" />
@@ -508,7 +508,7 @@ export default function MealsPage() {
                   "px-3 py-1.5 rounded-xl text-sm font-bold transition-colors",
                   libraryMealFilter === f.key
                     ? "bg-primary text-primary-foreground"
-                    : "bg-white border border-border text-muted-foreground hover:bg-muted/50"
+                    : "bg-card border border-border text-muted-foreground hover:bg-muted/50"
                 )}
               >{f.label}</button>
             ))}
@@ -539,7 +539,7 @@ export default function MealsPage() {
                   </div>
                   <div className="flex flex-col gap-2">
                     {group.map((recipe) => (
-                      <div key={recipe.id} className="rounded-2xl bg-white border border-border shadow-sm p-3.5 flex gap-3">
+                      <div key={recipe.id} className="rounded-2xl bg-card border border-border shadow-sm p-3.5 flex gap-3">
                         <div className="flex-1 min-w-0 flex flex-col gap-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-black text-sm">{recipe.name}</p>
@@ -634,7 +634,7 @@ export default function MealsPage() {
 
       {/* Ingredient selection panel */}
       {shoppingPanel && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-4 w-4 text-orange-500" />
@@ -680,7 +680,7 @@ export default function MealsPage() {
       )}
 
       {/* ── Desktop grid ── */}
-      <div className="hidden md:block rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="hidden md:block rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="grid grid-cols-[80px_repeat(7,1fr)] border-b">
           <div className="p-2" />
           {weekDates.map((date, i) => {
@@ -742,7 +742,7 @@ export default function MealsPage() {
           const ds = toDateStr(date);
           const isToday = ds === todayStr;
           return (
-            <div key={ds} className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+            <div key={ds} className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
               <div className={cn("px-4 py-2 border-b flex items-center gap-2", isToday && "bg-primary/5")}>
                 <span className={cn("text-sm font-bold", isToday ? "text-primary" : "")}>{DAY_NAMES[i]}</span>
                 <span className={cn("text-sm", isToday ? "text-primary" : "text-muted-foreground")}>
@@ -788,7 +788,7 @@ export default function MealsPage() {
 
       {/* ── Edit meal form ── */}
       {editing && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm p-4 flex flex-col gap-3">
+        <div className="rounded-2xl bg-card border border-border shadow-sm p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">{editingLabel}</p>
             <button onClick={closeEdit}><X className="h-4 w-4 text-muted-foreground" /></button>

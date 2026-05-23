@@ -160,7 +160,7 @@ export function Nav() {
       </header>
 
       {/* ── Mobile bottom tab bar ───────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t flex shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t flex shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
         {mobileNav.filter((item) => canSee(item.href)).map((item) => {
           const active = pathname === item.href;
           return (

@@ -55,10 +55,24 @@ export async function ensureSchema(): Promise<string[]> {
     const col = byName[name];
     if (!col) return;
     const existing: any[] = col.fields ?? col.schema ?? [];
+    let updated = [...existing, ...newFields.filter((f) => !hasField(existing, f.name))];
+    let needsUpdate = updated.length > existing.length;
+
+    // Also repair relation fields that exist but point to the wrong collectionId
+    for (const newF of newFields) {
+      if (newF.type !== "relation" || !newF.collectionId) continue;
+      const idx = updated.findIndex((f: any) => f.name === newF.name);
+      if (idx < 0) continue;
+      const existF = updated[idx];
+      if (existF.collectionId !== newF.collectionId) {
+        updated[idx] = { ...existF, collectionId: newF.collectionId, options: { ...(existF.options ?? {}), collectionId: newF.collectionId } };
+        log.push(`${name}: repaired ${newF.name} relation (collectionId was ${existF.collectionId})`);
+        needsUpdate = true;
+      }
+    }
+
+    if (!needsUpdate) return;
     const toAdd = newFields.filter((f) => !hasField(existing, f.name));
-    if (toAdd.length === 0) return;
-    const updated = [...existing, ...toAdd];
-    // Always include AUTH rules when patching app collections to prevent accidental reset
     const ruleFields = AUTH_COLS.has(name)
       ? { listRule: AUTH_RULE, viewRule: AUTH_RULE, createRule: AUTH_RULE, updateRule: AUTH_RULE, deleteRule: AUTH_RULE }
       : {};

@@ -83,7 +83,7 @@ export default function NotesPage() {
       <h1 className="text-2xl font-semibold">Notes</h1>
 
       {/* Add note form */}
-      <div className="rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-3">
+      <div className="rounded-2xl border bg-card shadow-sm p-4 flex flex-col gap-3">
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}

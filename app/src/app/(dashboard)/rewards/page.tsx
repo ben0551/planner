@@ -321,7 +321,7 @@ export default function RewardsPage() {
 
       {/* Allowance / Balance */}
       {!loading && kidBalances.length > 0 && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-1 flex items-center gap-2 border-b">
             <Wallet className="h-4 w-4 text-emerald-600" />
             <h2 className="font-bold text-sm">Allowance</h2>
@@ -486,7 +486,7 @@ export default function RewardsPage() {
       )}
 
       {/* Leaderboard */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="px-4 pt-3 pb-1 flex items-center gap-2 border-b">
           <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
           <h2 className="font-bold text-sm">Leaderboard</h2>
@@ -525,7 +525,7 @@ export default function RewardsPage() {
       </div>
 
       {/* Goals */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-violet-500" />
@@ -549,7 +549,7 @@ export default function RewardsPage() {
                 <button key={String(s)}
                   onClick={() => setGoalForm((f) => ({ ...f, shared: s, userId2: "" }))}
                   className={cn("px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                    goalForm.shared === s ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                    goalForm.shared === s ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}>
                   {s ? "👥 Shared between 2" : "👤 Individual"}
                 </button>

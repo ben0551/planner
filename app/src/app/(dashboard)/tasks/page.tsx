@@ -186,7 +186,7 @@ export default function TasksPage() {
       </div>
 
       {showForm && (
-        <div className="rounded-2xl border bg-white shadow-sm p-4 flex flex-col gap-3">
+        <div className="rounded-2xl border bg-card shadow-sm p-4 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor="task-title">Title</Label>
             <Input
@@ -259,7 +259,7 @@ export default function TasksPage() {
             onClick={() => setFilter(f)}
             className={cn(
               "px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors",
-              filter === f ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+              filter === f ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {f}
@@ -280,7 +280,7 @@ export default function TasksPage() {
 
           if (isEditing && editing) {
             return (
-              <div key={t.id} className="rounded-2xl border bg-white shadow-sm px-4 py-3 flex flex-col gap-3">
+              <div key={t.id} className="rounded-2xl border bg-card shadow-sm px-4 py-3 flex flex-col gap-3">
                 <Input
                   value={editing.title}
                   onChange={(e) => setEditing({ ...editing, title: e.target.value })}
@@ -355,7 +355,7 @@ export default function TasksPage() {
             <div
               key={t.id}
               className={cn(
-                "flex items-start gap-3 rounded-2xl border bg-white shadow-sm px-4 py-3 group",
+                "flex items-start gap-3 rounded-2xl border bg-card shadow-sm px-4 py-3 group",
                 isDone && "opacity-60",
               )}
             >

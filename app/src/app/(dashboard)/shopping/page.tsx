@@ -373,7 +373,7 @@ export default function ShoppingPage() {
               .filter((s) => s.name.toLowerCase().includes(name.trim().toLowerCase()))
               .slice(0, 8);
             return suggestions.length > 0 ? (
-              <div className="absolute top-full left-0 right-0 z-50 bg-white border border-border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 z-50 bg-popover border border-border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto">
                 {suggestions.map((s) => (
                   <button
                     key={s.id}
@@ -413,7 +413,7 @@ export default function ShoppingPage() {
             onClick={() => setSortMode(value)}
             className={cn(
               "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-              sortMode === value ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+              sortMode === value ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {label}
@@ -487,7 +487,7 @@ export default function ShoppingPage() {
             const hItems = historyItems.get(aList.id);
             const purchasedCount = hItems?.filter((i) => i.checked).length ?? 0;
             return (
-              <div key={aList.id} className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+              <div key={aList.id} className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
                 <button
                   onClick={() => toggleHistoryExpand(aList.id)}
                   className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"

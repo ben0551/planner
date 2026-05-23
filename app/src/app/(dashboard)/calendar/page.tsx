@@ -422,7 +422,7 @@ export default function CalendarPage() {
                 <button key={m}
                   onClick={() => { setFormMode(m); resetFormFields(); }}
                   className={cn("px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors",
-                    formMode === m ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                    formMode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}>
                   {m === "event" ? "📅 Event" : "📋 Task"}
                 </button>

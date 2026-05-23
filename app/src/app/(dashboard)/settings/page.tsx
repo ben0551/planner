@@ -205,7 +205,7 @@ function SettingsContent() {
       <h1 className="text-xl font-bold">Settings</h1>
 
       {/* Household */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="px-4 pt-3 pb-1 border-b">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Household</p>
         </div>
@@ -218,7 +218,7 @@ function SettingsContent() {
       </div>
 
       {/* Account */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="px-4 pt-3 pb-1 border-b">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Account</p>
         </div>
@@ -229,7 +229,7 @@ function SettingsContent() {
       </div>
 
       {/* Dark mode */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {dark ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-primary" />}
@@ -250,7 +250,7 @@ function SettingsContent() {
 
       {/* Week start — owners only */}
       {isOwner && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CalendarRange className="h-4 w-4 text-primary" />
@@ -282,7 +282,7 @@ function SettingsContent() {
 
       {/* Custody schedule — owners only */}
       {isOwner && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
             <CalendarRange className="h-4 w-4 text-primary" />
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Custody Schedule</p>
@@ -331,7 +331,7 @@ function SettingsContent() {
 
       {/* Google Calendar — owners only */}
       {isOwner && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-primary" />
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Google Calendar</p>
@@ -408,7 +408,7 @@ function SettingsContent() {
 
       {/* Sync database — owners only */}
       {isOwner && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
             <Database className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Database</p>
@@ -431,7 +431,7 @@ function SettingsContent() {
       )}
 
       {/* Shopping Catalog */}
-      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <button
           onClick={() => { setShowCatalog((s) => !s); if (!showCatalog) loadCatalog(); }}
           className="w-full px-4 py-3 flex items-center gap-2 hover:bg-muted/30 transition-colors text-left"
@@ -519,7 +519,7 @@ function SettingsContent() {
 
       {/* Owner-only actions */}
       {isOwner && (
-        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden divide-y">
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden divide-y">
           <button
             onClick={() => router.push("/settings/members")}
             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
