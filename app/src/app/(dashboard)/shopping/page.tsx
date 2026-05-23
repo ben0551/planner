@@ -46,8 +46,11 @@ export default function ShoppingPage() {
     if (!householdId) return;
     pb.collection("shopping_items")
       .getFullList({ filter: `household="${householdId}"` })
-      .then((r) => setItems((r as unknown as ShoppingItem[]).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch((err) => console.error("shopping_items fetch error:", err));
+      .then((r) => {
+        console.log("[shopping_items] householdId:", householdId, "items:", r.length, r);
+        setItems((r as unknown as ShoppingItem[]).sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch((err) => console.error("[shopping_items] fetch error:", err));
     pb.collection("shopping_catalog")
       .getFullList({ filter: `household="${householdId}"` })
       .then((r) => setCatalog((r as unknown as ShoppingCatalog[]).sort((a, b) => a.name.localeCompare(b.name))))
@@ -61,6 +64,7 @@ export default function ShoppingPage() {
     pb.collection("shopping_lists")
       .getFullList({ filter: `household="${householdId}"` })
       .then(async (loaded) => {
+        console.log("[shopping_lists] householdId:", householdId, "lists:", loaded.length, loaded);
         let active = (loaded as unknown as ShoppingList[])
           .filter((l) => !l.archived)
           .sort((a, b) => a.created.localeCompare(b.created));
