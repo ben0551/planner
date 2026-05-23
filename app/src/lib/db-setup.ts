@@ -426,6 +426,18 @@ export async function ensureSchema(): Promise<string[]> {
     // memberships might not exist yet on very first run — ignore
   }
 
+  // ── diagnostic: test-query each collection with admin auth ──
+  // This bypasses API rules — if a collection still fails here, it's a schema/SQLite issue
+  const DIAG_COLS = ["notes", "shopping_items", "shopping_lists", "shopping_catalog", "activity_log", "chores", "tasks"];
+  for (const name of DIAG_COLS) {
+    try {
+      const res = await pbApi(token, `collections/${name}/records?perPage=1&skipTotal=1`);
+      log.push(`${name}: admin query OK (${res.items?.length ?? 0} rows)`);
+    } catch (err: any) {
+      log.push(`${name}: ADMIN QUERY FAILED — ${String(err.message).slice(0, 150)}`);
+    }
+  }
+
   if (log.length === 0) log.push("All schema up to date.");
   return log;
 }
