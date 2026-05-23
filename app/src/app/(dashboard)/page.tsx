@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note, type ActivityEntry } from "@/lib/pocketbase";
+import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note } from "@/lib/pocketbase";
 import Link from "next/link";
 import { CheckCircle2, Star, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -155,7 +155,6 @@ export default function DashboardPage() {
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [streaks, setStreaks] = useState<{ name: string; streak: number; weekPts: number }[]>([]);
-  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -179,7 +178,7 @@ export default function DashboardPage() {
       const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
       const thirtyAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
 
-      const [chores, myWeekCompletions, allMyCompletions, events, tasks, allCompletions, allMemberships, recentActivity, pinnedNotes] = await Promise.all([
+      const [chores, myWeekCompletions, allMyCompletions, events, tasks, allCompletions, allMemberships, pinnedNotes] = await Promise.all([
         pb.collection("chores").getFullList<Chore>({
           filter: `household="${householdId}"`,
           expand: "assignee",
@@ -206,10 +205,6 @@ export default function DashboardPage() {
           filter: `household="${householdId}"`,
           expand: "user",
         }).catch(() => []),
-        pb.collection("activity_log").getFullList<ActivityEntry>({
-          filter: `household="${householdId}"`,
-          expand: "user",
-        }).catch(() => [] as ActivityEntry[]),
         pb.collection("notes").getFullList<Note>({
           filter: `household="${householdId}"`,
         }).catch(() => [] as Note[]),
@@ -243,7 +238,6 @@ export default function DashboardPage() {
       setUpcomingEvents(events);
       setAllTasks(visibleTasks);
       setStreaks(memberStreaks);
-      setActivity(recentActivity.sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")).slice(0, 10));
       setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")));
       setLoading(false);
     }
@@ -492,26 +486,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Activity feed */}
-      {activity.length > 0 && (
-        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-            <h2 className="font-bold text-sm">📜 Recent activity</h2>
-          </div>
-          <div className="divide-y divide-border">
-            {activity.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 px-4 py-2.5">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{a.description}</p>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {new Date(a.created).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
