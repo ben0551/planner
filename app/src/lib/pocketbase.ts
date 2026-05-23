@@ -49,6 +49,7 @@ export interface Household {
   name: string;
   invite_token: string;
   custody_week?: "odd" | "even" | "";
+  week_start?: "mon" | "sun";
 }
 
 export interface Membership {
@@ -59,6 +60,9 @@ export interface Membership {
   pin?: string;
   permissions?: Permissions;
   theme?: string;
+  balance?: number;
+  points_per_dollar?: number;
+  converted_points?: number;
   expand?: { household?: Household; user?: User };
 }
 
@@ -191,6 +195,16 @@ export interface Note {
   content: string;
   color?: string;
   pinned?: boolean;
+  created: string;
+}
+
+export interface BalanceTransaction {
+  id: string;
+  household: string;
+  membership: string;
+  amount: number;
+  description?: string;
+  type: "allowance" | "purchase" | "points_conversion";
   created: string;
 }
 

@@ -45,14 +45,21 @@ function choreColor(id: string) {
   return CARD_COLORS[h % CARD_COLORS.length];
 }
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES_MON = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES_SUN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getMonday(d: Date): Date {
+function getWeekStart(d: Date): Date {
+  const startOnSun = typeof window !== "undefined" && localStorage.getItem("planner_week_start") === "sun";
   const date = new Date(d);
   const day = date.getDay();
-  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  date.setDate(date.getDate() - (startOnSun ? day : (day === 0 ? 6 : day - 1)));
   date.setHours(0, 0, 0, 0);
   return date;
+}
+
+function todayDayIndex(): number {
+  const startOnSun = typeof window !== "undefined" && localStorage.getItem("planner_week_start") === "sun";
+  return startOnSun ? new Date().getDay() : (new Date().getDay() + 6) % 7;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -162,8 +169,10 @@ export default function ChoresPage() {
   const isOwner = membership?.role === "owner";
   const chorePerm = usePermission("chores");
 
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const [selectedDay, setSelectedDay] = useState(() => todayDayIndex());
+  const startOnSun = typeof window !== "undefined" && localStorage.getItem("planner_week_start") === "sun";
+  const DAY_NAMES = startOnSun ? DAY_NAMES_SUN : DAY_NAMES_MON;
 
   const [chores, setChores] = useState<Chore[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -636,7 +645,7 @@ export default function ChoresPage() {
             <button onClick={() => {
               const next = addDays(weekStart, -7);
               setWeekStart(next);
-              if (toDateStr(next) === toDateStr(getMonday(new Date()))) setSelectedDay((new Date().getDay() + 6) % 7);
+              if (toDateStr(next) === toDateStr(getWeekStart(new Date()))) setSelectedDay(todayDayIndex());
             }} className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
               <ChevronLeft className="h-5 w-5 text-muted-foreground" />
             </button>
@@ -644,7 +653,7 @@ export default function ChoresPage() {
             <button onClick={() => {
               const next = addDays(weekStart, 7);
               setWeekStart(next);
-              if (toDateStr(next) === toDateStr(getMonday(new Date()))) setSelectedDay((new Date().getDay() + 6) % 7);
+              if (toDateStr(next) === toDateStr(getWeekStart(new Date()))) setSelectedDay(todayDayIndex());
             }} className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </button>

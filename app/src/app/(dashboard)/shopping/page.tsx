@@ -30,7 +30,9 @@ export default function ShoppingPage() {
   const [editing, setEditing] = useState<EditDraft | null>(null);
 
   const [lists, setLists] = useState<ShoppingList[]>([]);
-  const [selectedListId, setSelectedListId] = useState<string>("");
+  const [selectedListId, setSelectedListId] = useState<string>(
+    () => (typeof window !== "undefined" ? localStorage.getItem("planner_shopping_list") ?? "" : ""),
+  );
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
 
@@ -64,7 +66,12 @@ export default function ShoppingPage() {
           active = [general as unknown as ShoppingList];
         }
         setLists(active);
-        setSelectedListId((prev) => prev || active[0].id);
+        setSelectedListId((prev) => {
+          const stored = prev || (typeof window !== "undefined" ? localStorage.getItem("planner_shopping_list") ?? "" : "");
+          const valid = stored && active.some((l) => l.id === stored) ? stored : active[0].id;
+          localStorage.setItem("planner_shopping_list", valid);
+          return valid;
+        });
       })
       .catch(() => {});
   }, [householdId]);
@@ -283,7 +290,7 @@ export default function ShoppingPage() {
           return (
             <div key={list.id} className="flex items-center shrink-0">
               <button
-                onClick={() => setSelectedListId(list.id)}
+                onClick={() => { setSelectedListId(list.id); localStorage.setItem("planner_shopping_list", list.id); }}
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold transition-colors",
                   lists.length > 1 ? "rounded-l-xl" : "rounded-xl",

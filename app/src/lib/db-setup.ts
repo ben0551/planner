@@ -67,10 +67,11 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "name", type: "text", required: true },
       { name: "invite_token", type: "text", required: true },
       { name: "custody_week", type: "text" },
+      { name: "week_start", type: "text" },
     ],
   });
 
-  await ensureCollection({
+  const membershipsId = await ensureCollection({
     name: "memberships",
     fields: [
       { name: "user", ...rel(PB_USERS_ID), required: true },
@@ -229,6 +230,17 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  await ensureCollection({
+    name: "balance_transactions",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "membership", ...rel(membershipsId), required: true },
+      { name: "amount", type: "number", required: true },
+      { name: "description", type: "text" },
+      { name: "type", ...sel(["allowance", "purchase", "points_conversion"]) },
+    ],
+  });
+
   // google_tokens: admin-only (no rules set), stores OAuth refresh tokens per household
   await ensureCollection({
     name: "google_tokens",
@@ -242,11 +254,17 @@ export async function ensureSchema(): Promise<string[]> {
 
   // ── add fields missing from existing collections (upgrades) ──
 
-  await addMissingFields("households", [{ name: "custody_week", type: "text" }]);
+  await addMissingFields("households", [
+    { name: "custody_week", type: "text" },
+    { name: "week_start", type: "text" },
+  ]);
   await addMissingFields("memberships", [
     { name: "permissions", type: "json" },
     { name: "theme", type: "text" },
     { name: "pin", type: "text" },
+    { name: "balance", type: "number" },
+    { name: "points_per_dollar", type: "number" },
+    { name: "converted_points", type: "number" },
   ]);
   await addMissingFields("chores", [
     { name: "type", ...sel(["single", "everyone", "shared"]) },
@@ -270,6 +288,18 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "good_price", type: "text" },
     { name: "meal_note", type: "text" },
     { name: "list", ...rel(shoppingListsId) },
+  ]);
+  await addMissingFields("shopping_lists", [
+    { name: "archived", type: "bool" },
+    { name: "archived_at", type: "text" },
+  ]);
+  await addMissingFields("shopping_catalog", [
+    { name: "category", type: "text" },
+    { name: "good_price", type: "text" },
+  ]);
+  await addMissingFields("notes", [
+    { name: "pinned", type: "bool" },
+    { name: "color", type: "text" },
   ]);
 
   // chores recurrence — add new option values if missing
@@ -314,7 +344,7 @@ export async function ensureSchema(): Promise<string[]> {
 
   // all app collections: allow authenticated users
   const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log"];
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions"];
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;

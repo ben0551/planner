@@ -24,12 +24,14 @@ const CATEGORY_SUGGESTIONS = [
   "Sandwich", "Eggs", "Smoothie", "Toast", "Snack",
 ];
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES_MON = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES_SUN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getMonday(d: Date): Date {
+function getWeekStart(d: Date): Date {
+  const startOnSun = typeof window !== "undefined" && localStorage.getItem("planner_week_start") === "sun";
   const date = new Date(d);
   const day = date.getDay();
-  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  date.setDate(date.getDate() - (startOnSun ? day : (day === 0 ? 6 : day - 1)));
   date.setHours(0, 0, 0, 0);
   return date;
 }
@@ -78,7 +80,9 @@ export default function MealsPage() {
   const [view, setView] = useState<PageView>("planner");
 
   // ── Planner state ──
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+  const startOnSun = typeof window !== "undefined" && localStorage.getItem("planner_week_start") === "sun";
+  const DAY_NAMES = startOnSun ? DAY_NAMES_SUN : DAY_NAMES_MON;
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [meals, setMeals] = useState<Meal[]>([]);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [recipeName, setRecipeName] = useState("");

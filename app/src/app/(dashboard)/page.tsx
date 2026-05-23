@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note, type ActivityEntry } from "@/lib/pocketbase";
 import Link from "next/link";
-import { CheckCircle2, Star, Square } from "lucide-react";
+import { CheckCircle2, Star, Square, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CHORE_EMOJI: Record<string, string> = {
@@ -224,7 +224,9 @@ export default function DashboardPage() {
       const today = todayStr();
 
       const now = new Date();
-      const dayOfWeek = (now.getDay() + 6) % 7;
+      const storedWeekStart = typeof window !== "undefined" ? localStorage.getItem("planner_week_start") : null;
+      const startOnSun = storedWeekStart === "sun";
+      const dayOfWeek = startOnSun ? now.getDay() : (now.getDay() + 6) % 7;
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - dayOfWeek);
       const weekStartStr = weekStart.toISOString().slice(0, 10);
@@ -333,10 +335,19 @@ export default function DashboardPage() {
             <span>{weekPoints} pts this week</span>
           </div>
         </div>
-        <div className="flex flex-col items-center gap-0.5 shrink-0">
-          <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
-          <span className="text-sm font-black">{totalPoints}</span>
-          <span className="text-[10px] text-muted-foreground">total pts</span>
+        <div className="flex gap-3 shrink-0">
+          <div className="flex flex-col items-center gap-0.5">
+            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
+            <span className="text-sm font-black">{totalPoints}</span>
+            <span className="text-[10px] text-muted-foreground">total pts</span>
+          </div>
+          {(membership as any)?.pin && typeof (membership as any)?.balance === "number" && (
+            <div className="flex flex-col items-center gap-0.5">
+              <Wallet className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-black text-emerald-600">${((membership as any).balance as number).toFixed(2)}</span>
+              <span className="text-[10px] text-muted-foreground">balance</span>
+            </div>
+          )}
         </div>
       </div>
 

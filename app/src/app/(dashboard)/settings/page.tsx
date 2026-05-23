@@ -49,6 +49,10 @@ function SettingsContent() {
   const [custodySaving, setCustodySaving] = useState(false);
   const [custodySaved, setCustodySaved] = useState(false);
   const [custodyError, setCustodyError] = useState("");
+
+  const [weekStart, setWeekStart] = useState<"mon" | "sun">("sun");
+  const [weekStartSaving, setWeekStartSaving] = useState(false);
+  const [weekStartSaved, setWeekStartSaved] = useState(false);
   const [migrating, setMigrating] = useState(false);
 
   const [showCatalog, setShowCatalog] = useState(false);
@@ -60,7 +64,12 @@ function SettingsContent() {
 
   useEffect(() => {
     setCustodyWeek((household?.custody_week as CustodyWeek) ?? "");
-  }, [household?.custody_week]);
+    if (household?.week_start) setWeekStart(household.week_start);
+    else {
+      const stored = localStorage.getItem("planner_week_start");
+      if (stored === "sun" || stored === "mon") setWeekStart(stored);
+    }
+  }, [household?.custody_week, household?.week_start]);
   const [migrateLog, setMigrateLog] = useState<string[] | null>(null);
   const [migrateError, setMigrateError] = useState("");
 
@@ -161,6 +170,21 @@ function SettingsContent() {
     setCatalogItems((prev) => prev?.filter((i) => i.id !== id) ?? null);
   }
 
+  async function saveWeekStart(value: "mon" | "sun") {
+    setWeekStart(value);
+    setWeekStartSaving(true);
+    try {
+      localStorage.setItem("planner_week_start", value);
+      if (household?.id) {
+        await pb.collection("households").update(household.id, { week_start: value });
+      }
+      setWeekStartSaved(true);
+      setTimeout(() => setWeekStartSaved(false), 2000);
+    } finally {
+      setWeekStartSaving(false);
+    }
+  }
+
   async function saveCustodyWeek() {
     if (!household?.id) return;
     setCustodySaving(true);
@@ -223,6 +247,38 @@ function SettingsContent() {
           </button>
         </div>
       </div>
+
+      {/* Week start — owners only */}
+      {isOwner && (
+        <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarRange className="h-4 w-4 text-primary" />
+              <div>
+                <span className="text-sm font-semibold">Week starts on</span>
+                {weekStartSaved && <span className="ml-2 text-xs text-primary">✓ Saved</span>}
+              </div>
+            </div>
+            <div className="flex gap-1 rounded-xl border border-border overflow-hidden">
+              {(["sun", "mon"] as const).map((v) => (
+                <button
+                  key={v}
+                  disabled={weekStartSaving}
+                  onClick={() => saveWeekStart(v)}
+                  className={cn(
+                    "px-4 py-1.5 text-sm font-medium transition-colors",
+                    weekStart === v
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted/40"
+                  )}
+                >
+                  {v === "sun" ? "Sunday" : "Monday"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custody schedule — owners only */}
       {isOwner && (
