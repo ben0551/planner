@@ -34,15 +34,14 @@ export default function NotesPage() {
     if (!householdId) return;
     pb.collection("notes")
       .getFullList<Note>({ filter: `household="${householdId}"` })
-      .then((items) => {
-        console.log("[notes] householdId:", householdId, "items returned:", items.length, items);
+      .then((items) =>
         setNotes(
           [...items]
-            .sort((a, b) => b.created.localeCompare(a.created))
+            .sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? ""))
             .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)),
-        );
-      })
-      .catch((err) => console.error("[notes] fetch error:", err))
+        ),
+      )
+      .catch((err) => console.error("notes fetch error:", err))
       .finally(() => setLoading(false));
   }, [householdId]);
 
@@ -74,7 +73,7 @@ export default function NotesPage() {
     await pb.collection("notes").update(note.id, { pinned: next });
     setNotes((prev) =>
       [...prev.map((n) => (n.id === note.id ? { ...n, pinned: next } : n))].sort(
-        (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || a.created.localeCompare(b.created) * -1,
+        (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? ""),
       ),
     );
   }

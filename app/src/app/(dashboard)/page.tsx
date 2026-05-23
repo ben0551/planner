@@ -297,8 +297,8 @@ export default function DashboardPage() {
       setUpcomingEvents(events.slice(0, 4));
       setDueTasks(visibleTasks);
       setStreaks(memberStreaks);
-      setActivity(recentActivity.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 10));
-      setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => b.created.localeCompare(a.created)));
+      setActivity(recentActivity.sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")).slice(0, 10));
+      setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")));
       setLoading(false);
     }
 

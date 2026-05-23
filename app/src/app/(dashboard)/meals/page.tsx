@@ -227,7 +227,7 @@ export default function MealsPage() {
         const lists = await pb.collection("shopping_lists").getFullList({
           filter: `household="${householdId}" && archived=false`,
         });
-        const active = (lists as unknown as ShoppingList[]).sort((a, b) => a.created.localeCompare(b.created));
+        const active = (lists as unknown as ShoppingList[]).sort((a, b) => (a.created ?? a.id ?? "").localeCompare(b.created ?? b.id ?? ""));
         setShoppingLists(active);
         setTargetListId(active[0]?.id ?? "");
       } catch { }
