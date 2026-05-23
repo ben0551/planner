@@ -212,7 +212,7 @@ export default function MealsPage() {
       if (recipe?.ingredients) {
         for (const line of recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean)) {
           const { ingredient, category } = parseIngredientLine(line);
-          const key = ingredient.toLowerCase();
+          const key = `${meal.recipe_name}|${meal.date}|${ingredient.toLowerCase()}`;
           if (!seen.has(key)) { seen.add(key); items.push({ ingredient, category, meal: meal.recipe_name, selected: true }); }
         }
       }
