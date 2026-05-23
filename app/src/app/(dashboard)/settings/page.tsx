@@ -148,8 +148,8 @@ function SettingsContent() {
     if (!householdId || catalogItems !== null) return;
     setCatalogLoading(true);
     try {
-      const items = await pb.collection("shopping_catalog").getFullList({ filter: `household="${householdId}"`, sort: "name" });
-      setCatalogItems(items as unknown as ShoppingCatalog[]);
+      const items = await pb.collection("shopping_catalog").getFullList({ filter: `household="${householdId}"` });
+      setCatalogItems((items as unknown as ShoppingCatalog[]).sort((a, b) => a.name.localeCompare(b.name)));
     } finally { setCatalogLoading(false); }
   }
 

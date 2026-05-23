@@ -130,6 +130,7 @@ export interface ShoppingList {
   name: string;
   archived: boolean;
   archived_at?: string;
+  created: string;
 }
 
 export interface ShoppingCatalog {

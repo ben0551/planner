@@ -33,12 +33,12 @@ export default function NotesPage() {
   useEffect(() => {
     if (!householdId) return;
     pb.collection("notes")
-      .getFullList<Note>({ filter: `household="${householdId}"`, sort: "-created" })
+      .getFullList<Note>({ filter: `household="${householdId}"` })
       .then((items) =>
         setNotes(
-          [...items].sort(
-            (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false),
-          ),
+          [...items]
+            .sort((a, b) => b.created.localeCompare(a.created))
+            .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)),
         ),
       )
       .catch((err) => console.error("notes fetch error:", err))

@@ -263,12 +263,10 @@ export default function DashboardPage() {
         }).catch(() => []),
         pb.collection("activity_log").getFullList<ActivityEntry>({
           filter: `household="${householdId}"`,
-          sort: "-created",
           expand: "user",
         }).catch(() => [] as ActivityEntry[]),
         pb.collection("notes").getFullList<Note>({
           filter: `household="${householdId}"`,
-          sort: "-created",
         }).catch(() => [] as Note[]),
       ]);
 
@@ -299,8 +297,8 @@ export default function DashboardPage() {
       setUpcomingEvents(events.slice(0, 4));
       setDueTasks(visibleTasks);
       setStreaks(memberStreaks);
-      setActivity(recentActivity.slice(0, 10));
-      setNotes(pinnedNotes.filter((n) => n.pinned));
+      setActivity(recentActivity.sort((a, b) => b.created.localeCompare(a.created)).slice(0, 10));
+      setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => b.created.localeCompare(a.created)));
       setLoading(false);
     }
 
