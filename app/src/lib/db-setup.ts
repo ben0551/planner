@@ -426,15 +426,61 @@ export async function ensureSchema(): Promise<string[]> {
     // memberships might not exist yet on very first run — ignore
   }
 
-  // ── diagnostic: test-query each collection with admin auth ──
-  // This bypasses API rules — if a collection still fails here, it's a schema/SQLite issue
-  const DIAG_COLS = ["notes", "shopping_items", "shopping_lists", "shopping_catalog", "activity_log", "chores", "tasks"];
-  for (const name of DIAG_COLS) {
-    try {
-      const res = await pbApi(token, `collections/${name}/records?perPage=1&skipTotal=1`);
-      log.push(`${name}: admin query OK (${res.items?.length ?? 0} rows)`);
-    } catch (err: any) {
-      log.push(`${name}: ADMIN QUERY FAILED — ${String(err.message).slice(0, 150)}`);
+  // ── repair broken relation collectionIds ──
+  // Map each relation field name to the name of the collection it should reference.
+  // When PocketBase stores the wrong collectionId (e.g. after a household collection was
+  // recreated), filter queries on that relation fail with "Something went wrong".
+  const FIELD_TO_COL: Record<string, string> = {
+    household:   "households",
+    user:        "_pb_users_auth_",
+    assignee:    "_pb_users_auth_",
+    assigned_to: "_pb_users_auth_",
+    created_by:  "_pb_users_auth_",
+    added_by:    "_pb_users_auth_",
+    chore:       "chores",
+    meal:        "meals",
+    list:        "shopping_lists",
+    membership:  "memberships",
+  };
+
+  function expectedId(fieldName: string): string | undefined {
+    const target = FIELD_TO_COL[fieldName];
+    if (!target) return undefined;
+    if (target === "_pb_users_auth_") return "_pb_users_auth_";
+    return fresh[target]?.id;
+  }
+
+  for (const name of AUTH_COLS) {
+    const col = fresh[name];
+    if (!col) continue;
+    const fields: any[] = col.fields ?? col.schema ?? [];
+    let dirty = false;
+    const repairedFields = fields.map((f: any) => {
+      if (f.type !== "relation") return f;
+      const expected = expectedId(f.name);
+      if (!expected || f.collectionId === expected) return f;
+      log.push(`${name}.${f.name}: collectionId ${f.collectionId} → ${expected}`);
+      dirty = true;
+      return { ...f, collectionId: expected, options: { ...(f.options ?? {}), collectionId: expected } };
+    });
+    if (dirty) {
+      await pbApi(token, `collections/${col.id}`, "PATCH", { schema: repairedFields, fields: repairedFields });
+      log.push(`${name}: relations repaired ✓`);
+    }
+  }
+
+  // ── filter-based diagnostic: confirm household relation works ──
+  const sampleHh = await pbApi(token, "collections/households/records?perPage=1&skipTotal=1").catch(() => null);
+  const sampleHhId = sampleHh?.items?.[0]?.id;
+  if (sampleHhId) {
+    const filterQ = encodeURIComponent(`household="${sampleHhId}"`);
+    for (const name of ["notes", "shopping_items", "shopping_lists", "chores"]) {
+      try {
+        await pbApi(token, `collections/${name}/records?perPage=1&skipTotal=1&filter=${filterQ}`);
+        log.push(`${name}: household filter OK`);
+      } catch (err: any) {
+        log.push(`${name}: household filter FAILED — ${String(err.message).slice(0, 120)}`);
+      }
     }
   }
 
