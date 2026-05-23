@@ -47,6 +47,10 @@ export async function ensureSchema(): Promise<string[]> {
     return created.id as string;
   }
 
+  // Collections that should have authenticated-only access
+  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions"]);
+  const AUTH_RULE = '@request.auth.id != ""';
+
   async function addMissingFields(name: string, newFields: any[]) {
     const col = byName[name];
     if (!col) return;
@@ -54,8 +58,11 @@ export async function ensureSchema(): Promise<string[]> {
     const toAdd = newFields.filter((f) => !hasField(existing, f.name));
     if (toAdd.length === 0) return;
     const updated = [...existing, ...toAdd];
-    // send both keys: older PB uses "schema", newer uses "fields"
-    await pbApi(token, `collections/${col.id}`, "PATCH", { schema: updated, fields: updated });
+    // Always include AUTH rules when patching app collections to prevent accidental reset
+    const ruleFields = AUTH_COLS.has(name)
+      ? { listRule: AUTH_RULE, viewRule: AUTH_RULE, createRule: AUTH_RULE, updateRule: AUTH_RULE, deleteRule: AUTH_RULE }
+      : {};
+    await pbApi(token, `collections/${col.id}`, "PATCH", { schema: updated, fields: updated, ...ruleFields });
     toAdd.forEach((f) => log.push(`${name}: added field ${f.name}`));
     byName[name] = { ...col, schema: updated, fields: updated };
   }
@@ -336,13 +343,14 @@ export async function ensureSchema(): Promise<string[]> {
   const freshCollections = await pbApi(token, "collections?perPage=200");
   const fresh: Record<string, any> = {};
   for (const c of freshCollections.items ?? []) fresh[c.name] = c;
+  log.push(`Checking rules on ${Object.keys(fresh).length} collections`);
 
   // users collection: allow public registration + allow auth users to view (needed for member name expand)
   const usersCol = fresh["users"] ?? freshCollections.items?.find((c: any) => c.id === "_pb_users_auth_");
   if (usersCol) {
     const patch: Record<string, string> = {};
     if (usersCol.createRule !== "") patch.createRule = "";
-    if (usersCol.viewRule !== '@request.auth.id != ""') patch.viewRule = '@request.auth.id != ""';
+    if (usersCol.viewRule !== AUTH_RULE) patch.viewRule = AUTH_RULE;
     if (Object.keys(patch).length > 0) {
       await pbApi(token, `collections/${usersCol.id}`, "PATCH", patch);
       if (patch.createRule !== undefined) log.push("users: set createRule to public");
@@ -351,23 +359,39 @@ export async function ensureSchema(): Promise<string[]> {
   }
 
   // all app collections: allow authenticated users
-  const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions"];
-  for (const name of appCols) {
+  for (const name of AUTH_COLS) {
     const col = fresh[name];
-    if (!col) continue;
-    if (col.listRule !== AUTH || col.viewRule !== AUTH || col.createRule !== AUTH || col.updateRule !== AUTH || col.deleteRule !== AUTH) {
+    if (!col) {
+      log.push(`WARNING: ${name} not found in collection list`);
+      continue;
+    }
+    const needsFix = col.listRule !== AUTH_RULE || col.viewRule !== AUTH_RULE || col.createRule !== AUTH_RULE || col.updateRule !== AUTH_RULE || col.deleteRule !== AUTH_RULE;
+    if (needsFix) {
+      log.push(`${name}: rules wrong (listRule=${JSON.stringify(col.listRule)}), fixing…`);
       const existingFields = col.fields ?? col.schema ?? [];
-      await pbApi(token, `collections/${col.id}`, "PATCH", {
+      await pbApi(token, `collections/${col.id}`, "PUT", {
+        id: col.id,
+        name: col.name,
+        type: col.type ?? "base",
+        system: col.system ?? false,
         schema: existingFields,
         fields: existingFields,
-        listRule: AUTH,
-        viewRule: AUTH,
-        createRule: AUTH,
-        updateRule: AUTH,
-        deleteRule: AUTH,
+        indexes: col.indexes ?? [],
+        listRule: AUTH_RULE,
+        viewRule: AUTH_RULE,
+        createRule: AUTH_RULE,
+        updateRule: AUTH_RULE,
+        deleteRule: AUTH_RULE,
       });
-      log.push(`${name}: set API rules to authenticated`);
+      // Verify the rule actually stuck
+      const check = await pbApi(token, `collections/${col.id}`);
+      if (check.listRule !== AUTH_RULE) {
+        log.push(`ERROR: ${name} rules did not apply — listRule is still ${JSON.stringify(check.listRule)}`);
+      } else {
+        log.push(`${name}: rules set ✓`);
+      }
+    } else {
+      log.push(`${name}: rules OK`);
     }
   }
 

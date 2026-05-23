@@ -41,7 +41,7 @@ export default function NotesPage() {
           ),
         ),
       )
-      .catch(() => {})
+      .catch((err) => console.error("notes fetch error:", err))
       .finally(() => setLoading(false));
   }, [householdId]);
 

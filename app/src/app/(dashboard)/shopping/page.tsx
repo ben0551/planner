@@ -46,7 +46,8 @@ export default function ShoppingPage() {
     if (!householdId) return;
     pb.collection("shopping_items")
       .getFullList({ filter: `household="${householdId}"`, sort: "name" })
-      .then((r) => setItems(r as unknown as ShoppingItem[]));
+      .then((r) => setItems(r as unknown as ShoppingItem[]))
+      .catch((err) => console.error("shopping_items fetch error:", err));
     pb.collection("shopping_catalog")
       .getFullList({ filter: `household="${householdId}"`, sort: "name" })
       .then((r) => setCatalog(r as unknown as ShoppingCatalog[]))
