@@ -305,7 +305,11 @@ export default function DashboardPage() {
     load().catch(() => setLoading(false));
   }, [householdId, user]);
 
-  const completedChoreIds = new Set(completions.map((c) => c.chore));
+  const _today = todayStr();
+  const todayCompletions = completions.filter(
+    (c) => c.date === _today || c.date.startsWith(_today + " ") || c.date.startsWith(_today + "T"),
+  );
+  const completedChoreIds = new Set(todayCompletions.map((c) => c.chore));
   const todayDoneCount = todayChores.filter((c) => completedChoreIds.has(c.id)).length;
 
   return (
