@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note, type ActivityEntry } from "@/lib/pocketbase";
 import Link from "next/link";
-import { CheckCircle2, Star, Square, Wallet } from "lucide-react";
+import { CheckCircle2, Star, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CHORE_EMOJI: Record<string, string> = {
@@ -47,6 +47,26 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function toDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function agendaEventTime(ev: CalendarEvent): string | null {
+  if (ev.all_day) return null;
+  const part = ev.start.includes("T") ? ev.start.split("T")[1] : ev.start.split(" ")[1];
+  if (!part || part.startsWith("00:00") || part.startsWith("23:59")) return null;
+  const [h, m] = part.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  const fmt = (hh: number, mm: number) =>
+    `${hh % 12 || 12}:${String(mm).padStart(2, "0")}${hh >= 12 ? "pm" : "am"}`;
+  const t1 = fmt(h, m);
+  if (!ev.end) return t1;
+  const endPart = ev.end.includes("T") ? ev.end.split("T")[1] : ev.end.split(" ")[1];
+  if (!endPart || endPart.startsWith("23:59")) return t1;
+  const [eh, em] = endPart.split(":").map(Number);
+  return isNaN(eh) || isNaN(em) ? t1 : `${t1}–${fmt(eh, em)}`;
+}
+
 function isoWeekNumber(date: Date): number {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -82,26 +102,6 @@ function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even"
   return chore.due_date ? chore.due_date.startsWith(dateStr) : false;
 }
 
-function formatEventDate(start: string) {
-  const d = new Date(start);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) {
-    return `Today ${d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}`;
-  }
-  if (diff === 1) {
-    return `Tomorrow ${d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}`;
-  }
-  return d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-}
-
-const EVENT_BORDER_COLORS = ["border-sky-400", "border-violet-400", "border-amber-400", "border-rose-400", "border-emerald-400"];
-function eventBorderColor(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return EVENT_BORDER_COLORS[h % EVENT_BORDER_COLORS.length];
-}
 
 function computeStreak(completions: ChoreCompletion[], uid: string): number {
   const dates = new Set(completions.filter(c => c.user === uid).map(c => c.date.slice(0, 10)));
@@ -133,61 +133,6 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
   );
 }
 
-function DueTasksSection({
-  tasks,
-  loading,
-  pb,
-  onToggle,
-}: {
-  tasks: Task[];
-  loading: boolean;
-  pb: ReturnType<typeof getClient>;
-  onToggle: (id: string) => void;
-}) {
-  async function complete(t: Task) {
-    await pb.collection("tasks").update(t.id, { completed: true });
-    onToggle(t.id);
-  }
-
-  return (
-    <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-base">📋</span>
-          <h2 className="font-bold text-sm">Due tasks</h2>
-        </div>
-        <Link href="/tasks" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
-      </div>
-      {loading ? (
-        <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
-      ) : (
-        <div className="divide-y divide-border">
-          {tasks.map((t) => {
-            const today = new Date().toISOString().substring(0, 10);
-            const overdue = t.due_date && t.due_date < today;
-            return (
-              <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
-                <button onClick={() => complete(t)} className="shrink-0 text-muted-foreground hover:text-primary transition-colors">
-                  <Square className="h-4 w-4" />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{t.title}</p>
-                  {t.notes && <p className="text-xs text-muted-foreground truncate">{t.notes}</p>}
-                </div>
-                {overdue && (
-                  <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full shrink-0">Overdue</span>
-                )}
-                {t.due_date === today && (
-                  <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0">Today</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const NOTE_BG: Record<string, string> = {
   "bg-yellow-100":  "bg-yellow-100 border-yellow-200",
@@ -208,7 +153,7 @@ export default function DashboardPage() {
   const [weekPoints, setWeekPoints] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([]);
-  const [dueTasks, setDueTasks] = useState<Task[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [streaks, setStreaks] = useState<{ name: string; streak: number; weekPts: number }[]>([]);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -250,7 +195,7 @@ export default function DashboardPage() {
           sort: "start",
         }),
         pb.collection("tasks").getFullList<Task>({
-          filter: `household="${householdId}" && due_date <= "${today}" && completed = false`,
+          filter: `household="${householdId}" && completed = false`,
           sort: "due_date",
         }).catch(() => [] as Task[]),
         pb.collection("chore_completions").getFullList<ChoreCompletion>({
@@ -276,11 +221,12 @@ export default function DashboardPage() {
       const wPts = myWeekCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
       const allPts = allMyCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
 
-      const visibleTasks = tasks.filter((t) => {
+      function isTaskVisible(t: Task) {
         if (membership?.role === "owner") return true;
         if (!t.assigned_to) return true;
         return t.assigned_to === user!.id || t.created_by === user!.id;
-      });
+      }
+      const visibleTasks = tasks.filter(isTaskVisible);
 
       const memberStreaks = (allMemberships as any[]).map((m) => {
         const uid = m.expand?.user?.id ?? m.user;
@@ -294,8 +240,8 @@ export default function DashboardPage() {
       setWeeklyCompleted(myWeekCompletions.length);
       setWeekPoints(wPts);
       setTotalPoints(allPts);
-      setUpcomingEvents(events.slice(0, 4));
-      setDueTasks(visibleTasks);
+      setUpcomingEvents(events);
+      setAllTasks(visibleTasks);
       setStreaks(memberStreaks);
       setActivity(recentActivity.sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")).slice(0, 10));
       setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")));
@@ -305,7 +251,28 @@ export default function DashboardPage() {
     load().catch(() => setLoading(false));
   }, [householdId, user]);
 
+  async function completeTask(id: string) {
+    await pb.collection("tasks").update(id, { completed: true });
+    setAllTasks((prev) => prev.filter((t) => t.id !== id));
+  }
+
   const _today = todayStr();
+
+  const overdueTasks = allTasks.filter((t) => !t.due_date || t.due_date < _today);
+
+  type AgendaDay = { d: Date; ds: string; events: CalendarEvent[]; tasks: Task[] };
+  const agendaDays: AgendaDay[] = [];
+  for (let i = 0; i <= 14; i++) {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    const ds = toDateStr(d);
+    const dayEvts = upcomingEvents.filter((e) => {
+      const evDate = e.start.split("T")[0].split(" ")[0];
+      return evDate === ds;
+    });
+    const dayTasks = allTasks.filter((t) => t.due_date === ds);
+    if (dayEvts.length > 0 || dayTasks.length > 0) agendaDays.push({ d, ds, events: dayEvts, tasks: dayTasks });
+  }
+
   const todayCompletions = completions.filter(
     (c) => c.date === _today || c.date.startsWith(_today + " ") || c.date.startsWith(_today + "T"),
   );
@@ -365,41 +332,91 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Upcoming events */}
-      {(loading || upcomingEvents.length > 0) && (
+      {/* Agenda: upcoming events + tasks */}
+      {(loading || overdueTasks.length > 0 || agendaDays.length > 0) && (
         <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-2 flex items-center gap-2">
-            <span className="text-base">📅</span>
-            <h2 className="font-bold text-sm">Upcoming events</h2>
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📅</span>
+              <h2 className="font-bold text-sm">Upcoming</h2>
+            </div>
+            <Link href="/calendar" className="text-xs text-orange-500 font-medium hover:underline">View calendar</Link>
           </div>
-          <div className="divide-y divide-border">
-            {loading ? (
-              <div className="px-4 py-3 text-sm text-muted-foreground">Loading…</div>
-            ) : upcomingEvents.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-muted-foreground">No upcoming events</div>
-            ) : (
-              upcomingEvents.map((ev) => (
-                <div key={ev.id} className={cn("flex items-start gap-0 pl-4")}>
-                  <div className={cn("w-1 self-stretch rounded-l mr-3 shrink-0", eventBorderColor(ev.id).replace("border-", "bg-"))} />
-                  <div className="py-2.5 pr-4 flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug">{ev.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatEventDate(ev.start)}</p>
+
+          {loading ? (
+            <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
+          ) : (
+            <div className="flex flex-col gap-4 px-4 pb-4">
+              {/* Overdue tasks */}
+              {overdueTasks.length > 0 && (
+                <div className="flex gap-3">
+                  <div className="w-12 shrink-0 text-right pt-0.5">
+                    <div className="text-[10px] font-semibold text-red-500 uppercase tracking-wide">Over</div>
+                    <div className="text-xl font-black leading-tight text-red-500">due</div>
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1.5 border-l-2 border-red-200 pl-3 min-w-0">
+                    {overdueTasks.map((t) => (
+                      <button key={t.id} onClick={() => completeTask(t.id)}
+                        className="text-left rounded-lg px-3 py-2 bg-red-50 hover:bg-red-100 transition-colors">
+                        <div className="flex items-center gap-1.5 text-red-800">
+                          <span className="text-xs shrink-0">○</span>
+                          <span className="text-sm font-medium truncate">{t.title}</span>
+                        </div>
+                        {t.due_date && (
+                          <div className="text-xs text-red-400 ml-4">
+                            Due {new Date(t.due_date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-          <div className="px-4 pb-3 pt-1">
-            <Link href="/calendar" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
-          </div>
-        </div>
-      )}
+              )}
 
-      {/* Due tasks */}
-      {(loading || dueTasks.length > 0) && (
-        <DueTasksSection tasks={dueTasks} loading={loading} pb={pb} onToggle={(id) =>
-          setDueTasks((prev) => prev.filter((t) => t.id !== id))
-        } />
+              {/* Date groups */}
+              {agendaDays.map(({ d, ds, events: dayEvts, tasks: dayTasks }) => {
+                const isToday = ds === _today;
+                const dayName = d.toLocaleDateString("en-AU", { weekday: "short" });
+                const monthName = d.toLocaleDateString("en-AU", { month: "short" });
+                return (
+                  <div key={ds} className="flex gap-3">
+                    <div className={cn("w-12 shrink-0 text-right pt-0.5", isToday ? "text-primary" : "text-muted-foreground")}>
+                      <div className="text-[10px] font-medium">{dayName}</div>
+                      <div className={cn("text-xl font-black leading-tight", isToday && "text-primary")}>{d.getDate()}</div>
+                      <div className="text-[10px]">{monthName}</div>
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1.5 border-l-2 border-border pl-3 min-w-0">
+                      {dayEvts.map((ev) => {
+                        const tl = agendaEventTime(ev);
+                        return (
+                          <Link key={ev.id} href="/calendar"
+                            className="text-left bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-2 transition-colors block">
+                            <div className="text-sm font-medium leading-snug">{ev.title}</div>
+                            {tl && <div className="text-xs text-primary/70">{tl}</div>}
+                          </Link>
+                        );
+                      })}
+                      {dayTasks.map((t) => (
+                        <button key={t.id} onClick={() => completeTask(t.id)}
+                          className="text-left rounded-lg px-3 py-2 bg-amber-50 hover:bg-amber-100 transition-colors">
+                          <div className="flex items-center gap-1.5 text-amber-800">
+                            <span className="text-xs shrink-0">○</span>
+                            <span className="text-sm font-medium truncate">{t.title}</span>
+                          </div>
+                          {t.notes && <div className="text-xs text-amber-600/70 ml-4 truncate">{t.notes}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {agendaDays.length === 0 && overdueTasks.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">Nothing coming up — all clear! 🎉</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Today's chores */}
