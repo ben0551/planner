@@ -101,7 +101,7 @@ export interface Meal {
   id: string;
   household: string;
   date: string;
-  meal_type: "breakfast" | "lunch" | "dinner";
+  meal_type: "breakfast" | "lunch" | "dinner" | "extras";
   recipe_name: string;
   notes?: string;
 }
@@ -133,7 +133,7 @@ export interface MealRecipe {
   id: string;
   household: string;
   name: string;
-  meal_type: "breakfast" | "lunch" | "dinner";
+  meal_type: "breakfast" | "lunch" | "dinner" | "extras";
   category?: string;
   notes?: string;
   ingredients?: string;

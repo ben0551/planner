@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { BookOpen, Plus, Search, ShoppingCart, Check, ExternalLink, ChevronLeft, ChevronRight, Pencil, Trash2, X } from "lucide-react";
 
-type MealType = "breakfast" | "lunch" | "dinner";
+type MealType = "breakfast" | "lunch" | "dinner" | "extras";
 type PageView = "planner" | "library";
 
 const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
   { key: "breakfast", label: "Breakfast", emoji: "🍳" },
   { key: "lunch",     label: "Lunch",     emoji: "🥪" },
   { key: "dinner",    label: "Dinner",    emoji: "🍽️" },
+  { key: "extras",    label: "Extras",    emoji: "🍱" },
 ];
 
 const CATEGORY_SUGGESTIONS = [
@@ -67,7 +68,7 @@ function formFromRecipe(r: MealRecipe): RecipeFormState {
   };
 }
 
-interface Editing { date: string; mealType: MealType }
+interface Editing { date: string; mealType: MealType; mealId?: string }
 
 export default function MealsPage() {
   const { householdId } = useAuth();
@@ -121,19 +122,19 @@ export default function MealsPage() {
 
   // ── Planner helpers ──
 
-  function getMeal(dateStr: string, mealType: MealType): Meal | undefined {
-    return meals.find((m) => m.date.startsWith(dateStr) && m.meal_type === mealType);
+  function getMeals(dateStr: string, mealType: MealType): Meal[] {
+    return meals.filter((m) => m.date.startsWith(dateStr) && m.meal_type === mealType);
   }
 
-  function openEdit(dateStr: string, mealType: MealType) {
-    const meal = getMeal(dateStr, mealType);
+  function openEdit(dateStr: string, mealType: MealType, mealId?: string) {
+    const meal = mealId ? meals.find((m) => m.id === mealId) : undefined;
     setRecipeName(meal?.recipe_name ?? "");
     setMealNotes(meal?.notes ?? "");
     setMealIngredients("");
     setSaveAsRecipe(false);
     setRecipeSearch("");
     setShowRecipePicker(false);
-    setEditing({ date: dateStr, mealType });
+    setEditing({ date: dateStr, mealType, mealId });
   }
 
   function closeEdit() {
@@ -153,12 +154,11 @@ export default function MealsPage() {
     if (!editing || !recipeName.trim() || !householdId) return;
     setSaving(true);
     try {
-      const existing = getMeal(editing.date, editing.mealType);
-      if (existing) {
-        const saved = await pb.collection("meals").update(existing.id, {
+      if (editing.mealId) {
+        const saved = await pb.collection("meals").update(editing.mealId, {
           recipe_name: recipeName.trim(), notes: mealNotes.trim() || undefined,
         });
-        setMeals((prev) => prev.map((m) => m.id === existing.id ? { ...m, ...saved } as Meal : m));
+        setMeals((prev) => prev.map((m) => m.id === editing.mealId ? { ...m, ...saved } as Meal : m));
       } else {
         const saved = await pb.collection("meals").create({
           household: householdId, date: editing.date, meal_type: editing.mealType,
@@ -310,7 +310,7 @@ export default function MealsPage() {
   // ── Derived ──
 
   const weekLabel = `${weekStart.toLocaleDateString("en", { month: "short", day: "numeric" })} – ${addDays(weekStart, 6).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
-  const editingMeal = editing ? getMeal(editing.date, editing.mealType) : undefined;
+  const editingMeal = editing?.mealId ? meals.find((m) => m.id === editing.mealId) : undefined;
   const editingMealType = MEAL_TYPES.find((t) => t.key === editing?.mealType);
   const editingLabel = editing
     ? `${new Date(editing.date + "T12:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })} · ${editingMealType?.emoji} ${editingMealType?.label}`
@@ -656,28 +656,33 @@ export default function MealsPage() {
             </div>
             {weekDates.map((date) => {
               const ds = toDateStr(date);
-              const meal = getMeal(ds, mt.key);
+              const cellMeals = getMeals(ds, mt.key);
               const isToday = ds === todayStr;
               return (
                 <div key={ds}
-                  onClick={() => openEdit(ds, mt.key)}
                   className={cn(
-                    "min-h-16 p-2 border-l cursor-pointer hover:bg-muted/30 transition-colors group",
-                    isToday && "bg-primary/5 hover:bg-primary/10"
+                    "min-h-16 p-2 border-l transition-colors",
+                    isToday && "bg-primary/5"
                   )}
                 >
-                  {meal ? (
-                    <div className="flex flex-col gap-0.5 h-full">
-                      <p className="text-xs font-medium leading-tight">{meal.recipe_name}</p>
-                      {meal.notes && <p className="text-[10px] text-muted-foreground leading-tight">{meal.notes}</p>}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
-                        className="mt-auto self-end text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                      >✕</button>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground/40 text-sm group-hover:text-muted-foreground">+</span>
-                  )}
+                  <div className="flex flex-col gap-1 h-full">
+                    {cellMeals.map((meal) => (
+                      <div key={meal.id}
+                        onClick={() => openEdit(ds, mt.key, meal.id)}
+                        className="flex items-start gap-1 cursor-pointer group/item rounded px-0.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <p className="text-xs font-medium leading-tight flex-1">{meal.recipe_name}</p>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
+                          className="text-[10px] text-muted-foreground opacity-0 group-hover/item:opacity-100 hover:text-destructive shrink-0 leading-tight"
+                        >✕</button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => openEdit(ds, mt.key)}
+                      className="mt-auto text-muted-foreground/30 text-sm hover:text-muted-foreground transition-colors leading-none"
+                    >+</button>
+                  </div>
                 </div>
               );
             })}
@@ -701,27 +706,31 @@ export default function MealsPage() {
               </div>
               <div className="divide-y">
                 {MEAL_TYPES.map((mt) => {
-                  const meal = getMeal(ds, mt.key);
+                  const cellMeals = getMeals(ds, mt.key);
                   return (
-                    <div key={mt.key}
-                      onClick={() => openEdit(ds, mt.key)}
-                      className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group"
-                    >
-                      <span className="text-lg shrink-0">{mt.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        {meal ? (
-                          <>
+                    <div key={mt.key} className="flex flex-col divide-y divide-border/50">
+                      {cellMeals.map((meal) => (
+                        <div key={meal.id}
+                          onClick={() => openEdit(ds, mt.key, meal.id)}
+                          className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group"
+                        >
+                          <span className="text-lg shrink-0">{mt.emoji}</span>
+                          <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium leading-tight">{meal.recipe_name}</p>
                             {meal.notes && <p className="text-xs text-muted-foreground">{meal.notes}</p>}
-                          </>
-                        ) : (
-                          <p className="text-sm text-muted-foreground/50 group-hover:text-muted-foreground">{mt.label}…</p>
-                        )}
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
+                            className="text-muted-foreground hover:text-destructive text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
+                        </div>
+                      ))}
+                      <div onClick={() => openEdit(ds, mt.key)}
+                        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors group"
+                      >
+                        <span className={cn("text-lg shrink-0", cellMeals.length > 0 ? "opacity-30" : "opacity-100")}>{mt.emoji}</span>
+                        <p className="text-sm text-muted-foreground/50 group-hover:text-muted-foreground">
+                          {cellMeals.length > 0 ? `+ add ${mt.label.toLowerCase()}` : `${mt.label}…`}
+                        </p>
                       </div>
-                      {meal && (
-                        <button onClick={(e) => { e.stopPropagation(); deleteMeal(meal.id); }}
-                          className="text-muted-foreground hover:text-destructive text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
-                      )}
                     </div>
                   );
                 })}
@@ -739,7 +748,7 @@ export default function MealsPage() {
             <button onClick={closeEdit}><X className="h-4 w-4 text-muted-foreground" /></button>
           </div>
 
-          {editing.mealType !== "dinner" && filteredPickerRecipes.length > 0 && (
+          {filteredPickerRecipes.length > 0 && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs text-muted-foreground">Choose from saved options</Label>
