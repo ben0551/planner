@@ -267,7 +267,7 @@ export default function DashboardPage() {
           expand: "user",
         }).catch(() => [] as ActivityEntry[]),
         pb.collection("notes").getFullList<Note>({
-          filter: `household="${householdId}" && pinned=true`,
+          filter: `household="${householdId}"`,
           sort: "-created",
         }).catch(() => [] as Note[]),
       ]);
@@ -300,7 +300,7 @@ export default function DashboardPage() {
       setDueTasks(visibleTasks);
       setStreaks(memberStreaks);
       setActivity(recentActivity.slice(0, 10));
-      setNotes(pinnedNotes);
+      setNotes(pinnedNotes.filter((n) => n.pinned));
       setLoading(false);
     }
 

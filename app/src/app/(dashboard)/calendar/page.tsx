@@ -63,6 +63,13 @@ function formatTime(t: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")}${h >= 12 ? "pm" : "am"}`;
 }
 
+function fmtTimeInput(next: string, prev: string): string {
+  const digits = next.replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return digits.length === 2 && prev.length < 3 ? digits + ":" : digits;
+  return digits.slice(0, 2) + ":" + digits.slice(2, 4);
+}
+
 function eventTimeLabel(ev: CalendarEvent): string | null {
   if (ev.all_day) return null;
   const part = ev.start.includes("T") ? ev.start.split("T")[1] : ev.start.split(" ")[1];
@@ -115,10 +122,16 @@ export default function CalendarPage() {
   const today = new Date();
   const todayStr = toDateStr(today);
 
-  const [view, setView] = useState<CalendarView>("month");
+  const [view, setView] = useState<CalendarView>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("planner_cal_view") as CalendarView | null;
+      if (saved === "month" || saved === "week" || saved === "agenda") return saved;
+    }
+    return "agenda";
+  });
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(today, startOnSun));
+  const [weekStart, setWeekStart] = useState<string>(() => toDateStr(getWeekStart(today, startOnSun)));
   const [weekDayIdx, setWeekDayIdx] = useState(() => {
     const ws = getWeekStart(today, startOnSun);
     return Math.round((today.getTime() - ws.getTime()) / 86400000);
@@ -144,9 +157,10 @@ export default function CalendarPage() {
 
   const { rangeFrom, rangeTo } = useMemo(() => {
     if (view === "week") {
-      const end = new Date(weekStart);
+      const wsDate = new Date(weekStart + "T00:00:00");
+      const end = new Date(wsDate);
       end.setDate(end.getDate() + 6);
-      return { rangeFrom: toDateStr(weekStart), rangeTo: toDateStr(end) };
+      return { rangeFrom: weekStart, rangeTo: toDateStr(end) };
     }
     if (view === "agenda") {
       const end = new Date(today);
@@ -301,25 +315,26 @@ export default function CalendarPage() {
 
   function prevPeriod() {
     if (view === "month") { if (month === 0) { setYear((y) => y - 1); setMonth(11); } else setMonth((m) => m - 1); }
-    else if (view === "week") setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() - 7); return d; });
+    else if (view === "week") setWeekStart((w) => { const d = new Date(w + "T00:00:00"); d.setDate(d.getDate() - 7); return toDateStr(d); });
   }
   function nextPeriod() {
     if (view === "month") { if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1); }
-    else if (view === "week") setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() + 7); return d; });
+    else if (view === "week") setWeekStart((w) => { const d = new Date(w + "T00:00:00"); d.setDate(d.getDate() + 7); return toDateStr(d); });
   }
   function goToday() {
     const now = new Date();
     setYear(now.getFullYear()); setMonth(now.getMonth());
-    setWeekStart(getWeekStart(now, startOnSun)); setWeekDayIdx(0);
+    setWeekStart(toDateStr(getWeekStart(now, startOnSun))); setWeekDayIdx(0);
   }
 
   const periodLabel = useMemo(() => {
     if (view === "month") return `${MONTH_NAMES[month]} ${year}`;
     if (view === "week") {
-      const end = new Date(weekStart); end.setDate(end.getDate() + 6);
-      if (weekStart.getMonth() === end.getMonth())
-        return `${MONTH_NAMES[weekStart.getMonth()]} ${weekStart.getDate()}–${end.getDate()}, ${weekStart.getFullYear()}`;
-      return `${MONTH_NAMES[weekStart.getMonth()]} ${weekStart.getDate()} – ${MONTH_NAMES[end.getMonth()]} ${end.getDate()}`;
+      const wsDate = new Date(weekStart + "T00:00:00");
+      const end = new Date(wsDate); end.setDate(end.getDate() + 6);
+      if (wsDate.getMonth() === end.getMonth())
+        return `${MONTH_NAMES[wsDate.getMonth()]} ${wsDate.getDate()}–${end.getDate()}, ${wsDate.getFullYear()}`;
+      return `${MONTH_NAMES[wsDate.getMonth()]} ${wsDate.getDate()} – ${MONTH_NAMES[end.getMonth()]} ${end.getDate()}`;
     }
     return "Upcoming";
   }, [view, year, month, weekStart]);
@@ -335,7 +350,7 @@ export default function CalendarPage() {
   }, [year, month, startOnSun]);
 
   const weekDays = useMemo(() =>
-    Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; }),
+    Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart + "T00:00:00"); d.setDate(d.getDate() + i); return d; }),
     [weekStart]);
 
   const agendaDays = useMemo(() => {
@@ -366,7 +381,7 @@ export default function CalendarPage() {
           )}
           <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium">
             {(["month", "week", "agenda"] as CalendarView[]).map((v) => (
-              <button key={v} onClick={() => setView(v)}
+              <button key={v} onClick={() => { setView(v); localStorage.setItem("planner_cal_view", v); }}
                 className={cn("px-3 py-1.5 capitalize transition-colors",
                   view === v ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted/40"
                 )}>
@@ -422,12 +437,12 @@ export default function CalendarPage() {
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-st">Start time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input id="ev-st" type="text" inputMode="numeric" placeholder="HH:MM" maxLength={5}
-                      value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                      value={startTime} onChange={(e) => setStartTime(fmtTimeInput(e.target.value, startTime))} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-et">End time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input id="ev-et" type="text" inputMode="numeric" placeholder="HH:MM" maxLength={5}
-                      value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                      value={endTime} onChange={(e) => setEndTime(fmtTimeInput(e.target.value, endTime))} />
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">

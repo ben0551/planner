@@ -353,7 +353,7 @@ export async function ensureSchema(): Promise<string[]> {
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;
-    if (col.listRule === null || col.viewRule === null || col.createRule === null || col.updateRule === null || col.deleteRule === null) {
+    if (col.listRule !== AUTH || col.viewRule !== AUTH || col.createRule !== AUTH || col.updateRule !== AUTH || col.deleteRule !== AUTH) {
       await pbApi(token, `collections/${col.id}`, "PATCH", {
         listRule: AUTH,
         viewRule: AUTH,
