@@ -54,9 +54,10 @@ export async function ensureSchema(): Promise<string[]> {
     const toAdd = newFields.filter((f) => !hasField(existing, f.name));
     if (toAdd.length === 0) return;
     const updated = [...existing, ...toAdd];
-    await pbApi(token, `collections/${col.id}`, "PATCH", { fields: updated });
+    // send both keys: older PB uses "schema", newer uses "fields"
+    await pbApi(token, `collections/${col.id}`, "PATCH", { schema: updated, fields: updated });
     toAdd.forEach((f) => log.push(`${name}: added field ${f.name}`));
-    byName[name] = { ...col, fields: updated };
+    byName[name] = { ...col, schema: updated, fields: updated };
   }
 
   // ── create missing collections (order matters for relations) ──
@@ -300,6 +301,10 @@ export async function ensureSchema(): Promise<string[]> {
   await addMissingFields("notes", [
     { name: "pinned", type: "bool" },
     { name: "color", type: "text" },
+  ]);
+  await addMissingFields("calendar_events", [
+    { name: "recurrence", ...sel(["none", "daily", "weekly", "fortnightly", "monthly", "yearly"]) },
+    { name: "recurrence_until", type: "text" },
   ]);
 
   // chores recurrence — add new option values if missing

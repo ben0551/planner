@@ -58,9 +58,9 @@ export default function ShoppingPage() {
       )
       .catch(() => {});
     pb.collection("shopping_lists")
-      .getFullList({ filter: `household="${householdId}" && archived=false`, sort: "created" })
+      .getFullList({ filter: `household="${householdId}"`, sort: "created" })
       .then(async (loaded) => {
-        let active = loaded as unknown as ShoppingList[];
+        let active = (loaded as unknown as ShoppingList[]).filter((l) => !l.archived);
         if (active.length === 0) {
           const general = await pb.collection("shopping_lists").create({ household: householdId, name: "General", archived: false });
           active = [general as unknown as ShoppingList];
@@ -204,11 +204,14 @@ export default function ShoppingPage() {
     if (archivedLists.length === 0 && !loadingHistory) {
       setLoadingHistory(true);
       try {
-        const archived = await pb.collection("shopping_lists").getFullList({
-          filter: `household="${householdId}" && archived=true`,
-          sort: "-archived_at,-created",
+        const all = await pb.collection("shopping_lists").getFullList({
+          filter: `household="${householdId}"`,
+          sort: "-created",
         });
-        setArchivedLists(archived as unknown as ShoppingList[]);
+        setArchivedLists(
+          (all as unknown as ShoppingList[]).filter((l) => l.archived)
+            .sort((a, b) => (b.archived_at ?? b.id).localeCompare(a.archived_at ?? a.id)),
+        );
       } finally { setLoadingHistory(false); }
     }
   }

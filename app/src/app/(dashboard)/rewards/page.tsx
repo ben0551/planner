@@ -314,7 +314,7 @@ export default function RewardsPage() {
                     <p className="text-sm font-semibold">{memberName(kb)}</p>
                     <p className="text-xs text-muted-foreground">
                       {unconvertedPts(kb)} pts unconverted
-                      {kb.membership.points_per_dollar && ptsAsDollars(kb) !== null && ` (≈ $${ptsAsDollars(kb)})`}
+                      {!!(kb.membership.points_per_dollar) && ptsAsDollars(kb) !== null && ` (≈ $${ptsAsDollars(kb)})`}
                     </p>
                   </div>
                   <p className="text-2xl font-bold text-emerald-600">
@@ -348,7 +348,7 @@ export default function RewardsPage() {
                         {kb.membership.points_per_dollar ? `${kb.membership.points_per_dollar} pts = $1` : "Set conversion rate"}
                       </button>
                     )}
-                    {kb.membership.points_per_dollar && unconvertedPts(kb) > 0 && (
+                    {!!(kb.membership.points_per_dollar) && unconvertedPts(kb) > 0 && (
                       <button
                         onClick={() => convertPoints(kb.membership.id)}
                         disabled={balanceSaving}

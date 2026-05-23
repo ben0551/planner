@@ -33,8 +33,14 @@ export default function NotesPage() {
   useEffect(() => {
     if (!householdId) return;
     pb.collection("notes")
-      .getFullList<Note>({ filter: `household="${householdId}"`, sort: "-pinned,-created" })
-      .then((items) => setNotes(items))
+      .getFullList<Note>({ filter: `household="${householdId}"`, sort: "-created" })
+      .then((items) =>
+        setNotes(
+          [...items].sort(
+            (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false),
+          ),
+        ),
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [householdId]);

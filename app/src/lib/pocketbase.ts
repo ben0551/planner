@@ -172,6 +172,8 @@ export interface CalendarEvent {
   source: "manual" | "google" | "outlook";
   external_id?: string;
   notes?: string;
+  recurrence?: "none" | "daily" | "weekly" | "fortnightly" | "monthly" | "yearly";
+  recurrence_until?: string;
 }
 
 export interface Task {
