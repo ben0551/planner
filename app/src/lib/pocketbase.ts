@@ -144,6 +144,7 @@ export interface Goal {
   id: string;
   household: string;
   user: string;
+  users?: string[];  // shared goal: array of 2 user IDs; combined points count toward target
   title: string;
   target_points: number;
   reward_description?: string;

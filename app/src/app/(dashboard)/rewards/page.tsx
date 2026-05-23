@@ -55,7 +55,7 @@ export default function RewardsPage() {
   const [kidBalances, setKidBalances] = useState<KidBalance[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
-  const [goalForm, setGoalForm] = useState({ userId: "", title: "", target: 100, reward: "", private: false });
+  const [goalForm, setGoalForm] = useState({ shared: false, userId: "", userId2: "", title: "", target: 100, reward: "", private: false });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -252,21 +252,40 @@ export default function RewardsPage() {
 
   function startEditGoal(goal: Goal) {
     setEditingGoalId(goal.id);
-    setGoalForm({ userId: goal.user, title: goal.title, target: goal.target_points, reward: goal.reward_description ?? "", private: goal.private ?? false });
+    const isShared = Array.isArray(goal.users) && goal.users.length >= 2;
+    setGoalForm({
+      shared: isShared,
+      userId: isShared ? goal.users![0] : goal.user,
+      userId2: isShared ? goal.users![1] : "",
+      title: goal.title,
+      target: goal.target_points,
+      reward: goal.reward_description ?? "",
+      private: goal.private ?? false,
+    });
     setShowGoalForm(true);
   }
 
   function cancelGoalForm() {
     setShowGoalForm(false);
     setEditingGoalId(null);
-    setGoalForm({ userId: "", title: "", target: 100, reward: "", private: false });
+    setGoalForm({ shared: false, userId: "", userId2: "", title: "", target: 100, reward: "", private: false });
   }
 
   async function saveGoal() {
     if (!goalForm.title.trim() || !goalForm.userId || !householdId) return;
+    if (goalForm.shared && !goalForm.userId2) return;
     setSaving(true);
     try {
-      const payload = { household: householdId, user: goalForm.userId, title: goalForm.title.trim(), target_points: goalForm.target, reward_description: goalForm.reward.trim() || undefined, private: goalForm.private };
+      const users = goalForm.shared ? [goalForm.userId, goalForm.userId2] : [];
+      const payload = {
+        household: householdId,
+        user: goalForm.userId,
+        users,
+        title: goalForm.title.trim(),
+        target_points: goalForm.target,
+        reward_description: goalForm.reward.trim() || undefined,
+        private: goalForm.private,
+      };
       if (editingGoalId) {
         const updated = await pb.collection("goals").update(editingGoalId, payload);
         setGoals((prev) => prev.map((g) => (g.id === editingGoalId ? (updated as unknown as Goal) : g)));
@@ -522,9 +541,22 @@ export default function RewardsPage() {
 
         {showGoalForm && (
           <div className="px-4 py-3 border-b bg-muted/20 flex flex-col gap-3">
+            {/* Shared toggle */}
+            <div className="flex gap-1 self-start bg-muted/60 rounded-lg p-0.5">
+              {([false, true] as const).map((s) => (
+                <button key={String(s)}
+                  onClick={() => setGoalForm((f) => ({ ...f, shared: s, userId2: "" }))}
+                  className={cn("px-3 py-1 rounded-md text-xs font-medium transition-colors",
+                    goalForm.shared === s ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}>
+                  {s ? "👥 Shared between 2" : "👤 Individual"}
+                </button>
+              ))}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <Label className="text-xs">For</Label>
+                <Label className="text-xs">{goalForm.shared ? "First person" : "For"}</Label>
                 <select
                   value={goalForm.userId}
                   onChange={(e) => setGoalForm((f) => ({ ...f, userId: e.target.value }))}
@@ -532,15 +564,43 @@ export default function RewardsPage() {
                 >
                   <option value="">Pick a person…</option>
                   {memberPoints.map((mp) => (
-                    <option key={mp.member.userId} value={mp.member.userId}>{mp.member.name.split(" ")[0]}</option>
+                    <option key={mp.member.userId} value={mp.member.userId}
+                      disabled={goalForm.shared && mp.member.userId === goalForm.userId2}>
+                      {mp.member.name.split(" ")[0]}
+                    </option>
                   ))}
                 </select>
               </div>
+              {goalForm.shared ? (
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Second person</Label>
+                  <select
+                    value={goalForm.userId2}
+                    onChange={(e) => setGoalForm((f) => ({ ...f, userId2: e.target.value }))}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Pick a person…</option>
+                    {memberPoints.map((mp) => (
+                      <option key={mp.member.userId} value={mp.member.userId}
+                        disabled={mp.member.userId === goalForm.userId}>
+                        {mp.member.name.split(" ")[0]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Target pts</Label>
+                  <Input type="number" min={1} value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: parseInt(e.target.value) || 1 }))} />
+                </div>
+              )}
+            </div>
+            {goalForm.shared && (
               <div className="flex flex-col gap-1">
-                <Label className="text-xs">Target pts</Label>
+                <Label className="text-xs">Combined target pts</Label>
                 <Input type="number" min={1} value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: parseInt(e.target.value) || 1 }))} />
               </div>
-            </div>
+            )}
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Goal title</Label>
               <Input value={goalForm.title} onChange={(e) => setGoalForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Stay up late Friday" />
@@ -549,13 +609,16 @@ export default function RewardsPage() {
               <Label className="text-xs">Reward description (optional)</Label>
               <Input value={goalForm.reward} onChange={(e) => setGoalForm((f) => ({ ...f, reward: e.target.value }))} placeholder="e.g. Pick a movie for family night" />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={goalForm.private} onChange={(e) => setGoalForm((f) => ({ ...f, private: e.target.checked }))} className="accent-primary" />
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Private — only visible to this child and you
-              </span>
-            </label>
-            <Button size="sm" onClick={saveGoal} disabled={saving || !goalForm.title.trim() || !goalForm.userId}>
+            {!goalForm.shared && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={goalForm.private} onChange={(e) => setGoalForm((f) => ({ ...f, private: e.target.checked }))} className="accent-primary" />
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Lock className="h-3 w-3" /> Private — only visible to this child and you
+                </span>
+              </label>
+            )}
+            <Button size="sm" onClick={saveGoal}
+              disabled={saving || !goalForm.title.trim() || !goalForm.userId || (goalForm.shared && !goalForm.userId2)}>
               {saving ? "Saving…" : editingGoalId ? "Save changes" : "Add goal"}
             </Button>
           </div>
@@ -570,11 +633,24 @@ export default function RewardsPage() {
         ) : (
           <div className="divide-y">
             {goals
-              .filter((goal) => !goal.private || isOwner || user?.id === goal.user)
+              .filter((goal) => {
+                if (isOwner) return true;
+                const sharedUsers = Array.isArray(goal.users) && goal.users.length >= 2 ? goal.users : null;
+                if (sharedUsers) return sharedUsers.includes(user?.id ?? "");
+                if (goal.private) return user?.id === goal.user;
+                return true;
+              })
               .map((goal) => {
+                const isShared = Array.isArray(goal.users) && goal.users.length >= 2;
+                const sharedMps = isShared ? goal.users!.map((uid) => memberPoints.find((m) => m.member.userId === uid)).filter(Boolean) : null;
                 const mp = memberPoints.find((m) => m.member.userId === goal.user);
-                const currentPts = mp?.totalPoints ?? 0;
+                const currentPts = isShared
+                  ? (sharedMps ?? []).reduce((sum, m) => sum + (m?.totalPoints ?? 0), 0)
+                  : (mp?.totalPoints ?? 0);
                 const pct = Math.min(1, currentPts / goal.target_points);
+                const nameLabel = isShared
+                  ? (sharedMps ?? []).map((m) => m?.member.name.split(" ")[0]).filter(Boolean).join(" + ")
+                  : mp?.member.name.split(" ")[0];
                 return (
                   <div key={goal.id} className={cn("px-4 py-3", goal.achieved && "opacity-60")}>
                     <div className="flex items-start justify-between gap-2">
@@ -584,7 +660,17 @@ export default function RewardsPage() {
                           {goal.achieved && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
                           {goal.private && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
                         </div>
-                        {mp && <p className="text-xs text-muted-foreground">{mp.member.name.split(" ")[0]}</p>}
+                        {nameLabel && (
+                          <p className="text-xs text-muted-foreground">
+                            {isShared && <span className="mr-1">👥</span>}{nameLabel}
+                            {isShared && <span className="ml-1 text-muted-foreground/60">— combined pts</span>}
+                          </p>
+                        )}
+                        {isShared && sharedMps && (
+                          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                            {sharedMps.map((m) => `${m?.member.name.split(" ")[0]}: ${m?.totalPoints ?? 0}`).join("  ·  ")}
+                          </p>
+                        )}
                         {goal.reward_description && <p className="text-xs text-violet-600 mt-0.5">🎁 {goal.reward_description}</p>}
                       </div>
                       <p className="text-xs font-bold text-amber-600 shrink-0">{currentPts} / {goal.target_points} pts</p>

@@ -279,7 +279,10 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "meal_type", type: "text" },
     { name: "ingredients", type: "text" },
   ]);
-  await addMissingFields("goals", [{ name: "private", type: "bool" }]);
+  await addMissingFields("goals", [
+    { name: "private", type: "bool" },
+    { name: "users", type: "json" },
+  ]);
   await addMissingFields("tasks", [
     { name: "recurrence", ...sel(["none", "daily", "weekly", "monthly"]) },
     { name: "last_completed", type: "text" },
