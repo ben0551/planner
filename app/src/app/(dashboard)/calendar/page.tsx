@@ -39,9 +39,10 @@ export default function CalendarPage() {
   const [formMode, setFormMode] = useState<FormMode>("event");
   const [title, setTitle] = useState("");
   const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [allDay, setAllDay] = useState(true);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState("");
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [gcalConnected, setGcalConnected] = useState(false);
@@ -104,43 +105,84 @@ export default function CalendarPage() {
     else setMonth((m) => m + 1);
   }
 
-  async function addEvent() {
+  function extractDate(s: string): string {
+    return (s.includes("T") ? s.split("T")[0] : s.split(" ")[0]);
+  }
+  function extractTime(s: string): string {
+    const part = s.includes("T") ? s.split("T")[1] : s.split(" ")[1];
+    if (!part || part.startsWith("00:00") || part.startsWith("23:59")) return "";
+    return part.substring(0, 5);
+  }
+
+  function openEditEvent(ev: CalendarEvent) {
+    setEditingEvent(ev);
+    setFormMode("event");
+    setTitle(ev.title);
+    setStart(extractDate(ev.start));
+    setStartTime(extractTime(ev.start));
+    setEndTime(extractTime(ev.end));
+    setNotes(ev.notes ?? "");
+    setShowForm(true);
+  }
+
+  function formatTime(t: string): string {
+    const [h, m] = t.split(":").map(Number);
+    const ampm = h >= 12 ? "pm" : "am";
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")}${ampm}`;
+  }
+
+  function eventTimeLabel(ev: CalendarEvent): string | null {
+    if (ev.all_day) return null;
+    const timePart = ev.start.includes("T") ? ev.start.split("T")[1] : ev.start.split(" ")[1];
+    if (!timePart) return null;
+    const start = formatTime(timePart);
+    if (!ev.end) return start;
+    const endPart = ev.end.includes("T") ? ev.end.split("T")[1] : ev.end.split(" ")[1];
+    if (!endPart || endPart === "23:59:59") return start;
+    return `${start}–${formatTime(endPart)}`;
+  }
+
+  function closeEventForm() {
+    setShowForm(false);
+    setEditingEvent(null);
+    setTitle(""); setStart(""); setStartTime(""); setEndTime(""); setNotes("");
+  }
+
+  async function saveEvent() {
     if (!title.trim() || !start || !householdId) return;
     setLoading(true);
     try {
-      const startVal = allDay ? `${start} 00:00:00` : start;
-      const endVal = end
-        ? allDay ? `${end} 23:59:59` : end
+      const allDay = !startTime;
+      const startVal = startTime ? `${start} ${startTime}:00` : `${start} 00:00:00`;
+      const endVal = endTime
+        ? `${start} ${endTime}:00`
         : allDay ? `${start} 23:59:59` : startVal;
-      const ev = await pb.collection("calendar_events").create({
-        household: householdId,
+      const payload = {
         title: title.trim(),
         start: startVal,
         end: endVal,
         all_day: allDay,
-        source: "manual",
         notes: notes.trim() || undefined,
-      });
-      setEvents((prev) => [...prev, ev as unknown as CalendarEvent]);
-      setTitle(""); setStart(""); setEnd(""); setAllDay(true); setNotes("");
-      setShowForm(false);
-
-      // Push to Google Calendar (fire and forget — updates external_id in background)
-      if (gcalConnected) {
-        fetch("/api/google-calendar/event", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            householdId,
-            plannerEventId: ev.id,
-            title: title.trim(),
-            start: startVal,
-            end: endVal,
-            allDay,
-            notes: notes.trim() || undefined,
-          }),
+      };
+      if (editingEvent) {
+        await pb.collection("calendar_events").update(editingEvent.id, payload);
+        setEvents((prev) => prev.map((e) =>
+          e.id === editingEvent.id ? { ...e, ...payload } : e
+        ));
+      } else {
+        const ev = await pb.collection("calendar_events").create({
+          household: householdId, source: "manual", ...payload,
         });
+        setEvents((prev) => [...prev, ev as unknown as CalendarEvent]);
+        if (gcalConnected) {
+          fetch("/api/google-calendar/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ householdId, plannerEventId: ev.id, ...payload, allDay }),
+          });
+        }
       }
+      closeEventForm();
     } finally {
       setLoading(false);
     }
@@ -234,7 +276,7 @@ export default function CalendarPage() {
           <Button
             size="sm"
             variant={showForm ? "secondary" : "default"}
-            onClick={() => setShowForm((v) => !v)}
+            onClick={() => showForm ? closeEventForm() : setShowForm(true)}
           >
             {showForm ? "Cancel" : "+ Add"}
           </Button>
@@ -249,7 +291,7 @@ export default function CalendarPage() {
               {(["event", "task"] as FormMode[]).map((m) => (
                 <button
                   key={m}
-                  onClick={() => { setFormMode(m); setTitle(""); setStart(""); setEnd(""); setNotes(""); setAllDay(true); }}
+                  onClick={() => { setFormMode(m); setTitle(""); setStart(""); setStartTime(""); setEndTime(""); setNotes(""); }}
                   className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors ${
                     formMode === m ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -272,33 +314,32 @@ export default function CalendarPage() {
 
             {formMode === "event" ? (
               <>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="ev-allday"
-                    checked={allDay}
-                    onChange={(e) => setAllDay(e.target.checked)}
-                    className="h-4 w-4 accent-primary"
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="ev-start">Date</Label>
+                  <Input
+                    id="ev-start"
+                    type="date"
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
                   />
-                  <Label htmlFor="ev-allday">All day</Label>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
-                    <Label htmlFor="ev-start">Start</Label>
+                    <Label htmlFor="ev-start-time">Start time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input
-                      id="ev-start"
-                      type={allDay ? "date" : "datetime-local"}
-                      value={start}
-                      onChange={(e) => setStart(e.target.value)}
+                      id="ev-start-time"
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Label htmlFor="ev-end">End (optional)</Label>
+                    <Label htmlFor="ev-end-time">End time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input
-                      id="ev-end"
-                      type={allDay ? "date" : "datetime-local"}
-                      value={end}
-                      onChange={(e) => setEnd(e.target.value)}
+                      id="ev-end-time"
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
                     />
                   </div>
                 </div>
@@ -324,12 +365,20 @@ export default function CalendarPage() {
                 placeholder="Optional"
               />
             </div>
-            <Button
-              onClick={formMode === "event" ? addEvent : addTask}
-              disabled={loading || !title.trim() || !start}
-            >
-              {formMode === "event" ? "Add event" : "Add task"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={formMode === "event" ? saveEvent : addTask}
+                disabled={loading || !title.trim() || !start}
+              >
+                {loading ? "Saving…" : editingEvent ? "Save changes" : formMode === "event" ? "Add event" : "Add task"}
+              </Button>
+              {editingEvent && (
+                <Button variant="ghost" className="text-destructive hover:text-destructive"
+                  onClick={() => { deleteEvent(editingEvent.id); closeEventForm(); }}>
+                  Delete
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -358,19 +407,26 @@ export default function CalendarPage() {
               <span className={`text-xs font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}>
                 {day}
               </span>
-              {dayEvents.map((ev) => (
-                <div key={ev.id} className="flex items-center gap-0.5 group min-w-0">
-                  <span className="text-xs truncate flex-1 bg-primary/10 text-primary rounded px-1 leading-5">
-                    {ev.title}
-                  </span>
-                  <button
-                    onClick={() => deleteEvent(ev.id)}
-                    className="hidden group-hover:block text-muted-foreground hover:text-destructive text-xs flex-shrink-0"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
+              {dayEvents.map((ev) => {
+                const timeLabel = eventTimeLabel(ev);
+                return (
+                  <div key={ev.id} className="flex items-center gap-0.5 group min-w-0">
+                    <button
+                      onClick={() => openEditEvent(ev)}
+                      className="text-xs truncate flex-1 bg-primary/10 text-primary rounded px-1 leading-5 text-left hover:bg-primary/20 transition-colors"
+                    >
+                      {timeLabel && <span className="font-semibold mr-0.5">{timeLabel}</span>}
+                      {ev.title}
+                    </button>
+                    <button
+                      onClick={() => deleteEvent(ev.id)}
+                      className="hidden group-hover:block text-muted-foreground hover:text-destructive text-xs flex-shrink-0"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
               {dayTasks.map((t) => (
                 <button
                   key={t.id}
