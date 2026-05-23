@@ -117,6 +117,15 @@ export interface ShoppingItem {
   meal_note?: string;
   added_by?: string;
   good_price?: string;
+  list?: string;
+}
+
+export interface ShoppingList {
+  id: string;
+  household: string;
+  name: string;
+  archived: boolean;
+  archived_at?: string;
 }
 
 export interface ShoppingCatalog {

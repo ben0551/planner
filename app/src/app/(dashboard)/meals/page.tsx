@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type Meal, type MealRecipe } from "@/lib/pocketbase";
+import { getClient, type Meal, type MealRecipe, type ShoppingList } from "@/lib/pocketbase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +91,8 @@ export default function MealsPage() {
   const [shoppingPanel, setShoppingPanel] = useState<{ ingredient: string; category: string; meal: string; selected: boolean }[] | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartAdded, setCartAdded] = useState(false);
+  const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
+  const [targetListId, setTargetListId] = useState<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   // ── Library state ──
@@ -195,7 +197,7 @@ export default function MealsPage() {
     return { ingredient: line, category: "Grocery" };
   }
 
-  function openShoppingPanel() {
+  async function openShoppingPanel() {
     const seen = new Set<string>();
     const items: { ingredient: string; category: string; meal: string; selected: boolean }[] = [];
     const sorted = [...meals].sort((a, b) => a.date.localeCompare(b.date));
@@ -216,6 +218,19 @@ export default function MealsPage() {
       return;
     }
     setShoppingPanel(items);
+    if (shoppingLists.length === 0) {
+      try {
+        const lists = await pb.collection("shopping_lists").getFullList({
+          filter: `household="${householdId}" && archived=false`,
+          sort: "created",
+        });
+        const active = lists as unknown as ShoppingList[];
+        setShoppingLists(active);
+        setTargetListId(active[0]?.id ?? "");
+      } catch { }
+    } else if (!targetListId) {
+      setTargetListId(shoppingLists[0]?.id ?? "");
+    }
   }
 
   async function confirmAddToShoppingList() {
@@ -231,6 +246,7 @@ export default function MealsPage() {
           category: item.category,
           meal_note: item.meal,
           checked: false,
+          list: targetListId || undefined,
         })
       ));
       setShoppingPanel(null);
@@ -640,11 +656,20 @@ export default function MealsPage() {
               </label>
             ))}
           </div>
-          <div className="px-4 py-3 border-t flex items-center gap-3">
+          <div className="px-4 py-3 border-t flex items-center gap-3 flex-wrap">
             <Button size="sm" onClick={confirmAddToShoppingList}
               disabled={addingToCart || shoppingPanel.every((i) => !i.selected)}>
               {addingToCart ? "Adding…" : `Add ${shoppingPanel.filter((i) => i.selected).length} item${shoppingPanel.filter((i) => i.selected).length === 1 ? "" : "s"}`}
             </Button>
+            {shoppingLists.length > 1 && (
+              <select
+                value={targetListId}
+                onChange={(e) => setTargetListId(e.target.value)}
+                className="h-8 rounded-xl border border-input bg-background px-2 text-xs font-medium"
+              >
+                {shoppingLists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            )}
             <button onClick={() => setShoppingPanel(null)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>

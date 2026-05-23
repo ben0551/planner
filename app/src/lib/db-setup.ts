@@ -132,6 +132,16 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  const shoppingListsId = await ensureCollection({
+    name: "shopping_lists",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "name", type: "text", required: true },
+      { name: "archived", type: "bool" },
+      { name: "archived_at", type: "text" },
+    ],
+  });
+
   await ensureCollection({
     name: "shopping_items",
     fields: [
@@ -259,6 +269,7 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "added_by", ...rel(PB_USERS_ID) },
     { name: "good_price", type: "text" },
     { name: "meal_note", type: "text" },
+    { name: "list", ...rel(shoppingListsId) },
   ]);
 
   // chores recurrence — add new option values if missing
@@ -303,7 +314,7 @@ export async function ensureSchema(): Promise<string[]> {
 
   // all app collections: allow authenticated users
   const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log"];
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log"];
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;
