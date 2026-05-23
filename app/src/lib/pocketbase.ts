@@ -119,6 +119,14 @@ export interface ShoppingItem {
   good_price?: string;
 }
 
+export interface ShoppingCatalog {
+  id: string;
+  household: string;
+  name: string;
+  category?: string;
+  good_price?: string;
+}
+
 export interface Goal {
   id: string;
   household: string;

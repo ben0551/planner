@@ -148,6 +148,16 @@ export async function ensureSchema(): Promise<string[]> {
   });
 
   await ensureCollection({
+    name: "shopping_catalog",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "name", type: "text", required: true },
+      { name: "category", type: "text" },
+      { name: "good_price", type: "text" },
+    ],
+  });
+
+  await ensureCollection({
     name: "goals",
     fields: [
       { name: "household", ...rel(householdsId), required: true },
@@ -293,7 +303,7 @@ export async function ensureSchema(): Promise<string[]> {
 
   // all app collections: allow authenticated users
   const AUTH = '@request.auth.id != ""';
-  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "goals", "calendar_events", "tasks", "notes", "activity_log"];
+  const appCols = ["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log"];
   for (const name of appCols) {
     const col = fresh[name];
     if (!col) continue;

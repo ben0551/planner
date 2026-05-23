@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type ShoppingItem } from "@/lib/pocketbase";
+import { getClient, type ShoppingItem, type ShoppingCatalog } from "@/lib/pocketbase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, Check, X } from "lucide-react";
@@ -23,6 +23,8 @@ export default function ShoppingPage() {
   const [category, setCategory] = useState("");
   const [goodPrice, setGoodPrice] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("category");
+  const [catalog, setCatalog] = useState<ShoppingCatalog[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   type EditDraft = { id: string; quantity: string; category: string; goodPrice: string };
   const [editing, setEditing] = useState<EditDraft | null>(null);
@@ -32,6 +34,10 @@ export default function ShoppingPage() {
     pb.collection("shopping_items")
       .getFullList({ filter: `household="${householdId}"`, sort: "name" })
       .then((items) => setItems(items as unknown as ShoppingItem[]));
+    pb.collection("shopping_catalog")
+      .getFullList({ filter: `household="${householdId}"`, sort: "name" })
+      .then((items) => setCatalog(items as unknown as ShoppingCatalog[]))
+      .catch(() => {});
     pb.collection("memberships")
       .getFullList({ filter: `household="${householdId}"`, expand: "user" })
       .then((ms) =>
@@ -44,6 +50,23 @@ export default function ShoppingPage() {
       )
       .catch(() => {});
   }, [householdId]);
+
+  async function upsertCatalog(itemName: string, itemCategory: string, itemGoodPrice: string) {
+    if (!householdId || !itemName.trim()) return;
+    const existing = catalog.find((s) => s.name.toLowerCase() === itemName.trim().toLowerCase());
+    const data: Record<string, string> = { household: householdId, name: itemName.trim() };
+    if (itemCategory.trim()) data.category = itemCategory.trim();
+    if (itemGoodPrice.trim()) data.good_price = itemGoodPrice.trim();
+    if (existing) {
+      if (itemCategory.trim() || itemGoodPrice.trim()) {
+        await pb.collection("shopping_catalog").update(existing.id, data);
+        setCatalog((prev) => prev.map((s) => s.id === existing.id ? { ...s, ...data } : s));
+      }
+    } else {
+      const created = await pb.collection("shopping_catalog").create(data);
+      setCatalog((prev) => [...prev, created as unknown as ShoppingCatalog].sort((a, b) => a.name.localeCompare(b.name)));
+    }
+  }
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +81,9 @@ export default function ShoppingPage() {
       added_by: userId || undefined,
     });
     setItems((prev) => [...prev, item as unknown as ShoppingItem]);
+    await upsertCatalog(name.trim(), category.trim(), goodPrice.trim());
     setName(""); setQuantity(""); setCategory(""); setGoodPrice("");
+    setShowSuggestions(false);
   }
 
   async function toggleItem(item: ShoppingItem) {
@@ -85,6 +110,8 @@ export default function ShoppingPage() {
           : i,
       ),
     );
+    const savedItem = items.find((i) => i.id === editing.id);
+    if (savedItem) await upsertCatalog(savedItem.name, editing.category, editing.goodPrice);
     setEditing(null);
   }
 
@@ -106,7 +133,7 @@ export default function ShoppingPage() {
     if (sortMode === "added_by") {
       const byAdder = new Map<string, ShoppingItem[]>();
       for (const item of list) {
-        const key = memberName(item.added_by) ?? "Unknown";
+        const key = item.meal_note ? "Planner" : (memberName(item.added_by) ?? "Unknown");
         if (!byAdder.has(key)) byAdder.set(key, []);
         byAdder.get(key)!.push(item);
       }
@@ -146,12 +173,41 @@ export default function ShoppingPage() {
       </div>
 
       <form onSubmit={addItem} className="flex gap-2 flex-wrap">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Add item..."
-          className="flex-1 min-w-32"
-        />
+        <div className="relative flex-1 min-w-32">
+          <Input
+            value={name}
+            onChange={(e) => { setName(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            placeholder="Add item..."
+          />
+          {showSuggestions && name.trim().length > 0 && (() => {
+            const suggestions = catalog
+              .filter((s) => s.name.toLowerCase().includes(name.trim().toLowerCase()))
+              .slice(0, 8);
+            return suggestions.length > 0 ? (
+              <div className="absolute top-full left-0 right-0 z-50 bg-white border border-border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onMouseDown={() => {
+                      setName(s.name);
+                      if (s.category) setCategory(s.category);
+                      if (s.good_price) setGoodPrice(s.good_price);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center gap-2 first:rounded-t-xl last:rounded-b-xl"
+                  >
+                    <span className="flex-1">{s.name}</span>
+                    {s.category && <span className="text-xs text-muted-foreground">{s.category}</span>}
+                    {s.good_price && <span className="text-xs text-emerald-600">≤ {s.good_price}</span>}
+                  </button>
+                ))}
+              </div>
+            ) : null;
+          })()}
+        </div>
         <Input
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
@@ -206,8 +262,8 @@ export default function ShoppingPage() {
             <ShoppingRow
               key={item.id}
               item={item}
-              addedByName={memberName(item.added_by)}
-              isCurrentUser={item.added_by === userId}
+              addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
+              isCurrentUser={item.added_by === userId && !item.meal_note}
               showAddedBy={sortMode !== "added_by"}
               editing={editing?.id === item.id ? editing : null}
               onToggle={toggleItem}
@@ -227,8 +283,8 @@ export default function ShoppingPage() {
             <ShoppingRow
               key={item.id}
               item={item}
-              addedByName={memberName(item.added_by)}
-              isCurrentUser={item.added_by === userId}
+              addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
+              isCurrentUser={item.added_by === userId && !item.meal_note}
               showAddedBy={sortMode !== "added_by"}
               editing={null}
               onToggle={toggleItem}
