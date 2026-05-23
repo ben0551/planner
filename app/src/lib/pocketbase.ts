@@ -114,6 +114,7 @@ export interface ShoppingItem {
   category?: string;
   checked: boolean;
   meal?: string;
+  meal_note?: string;
   added_by?: string;
   good_price?: string;
 }

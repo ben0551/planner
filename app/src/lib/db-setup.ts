@@ -143,6 +143,7 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "meal", ...rel(mealsId) },
       { name: "added_by", ...rel(PB_USERS_ID) },
       { name: "good_price", type: "text" },
+      { name: "meal_note", type: "text" },
     ],
   });
 
@@ -247,6 +248,7 @@ export async function ensureSchema(): Promise<string[]> {
   await addMissingFields("shopping_items", [
     { name: "added_by", ...rel(PB_USERS_ID) },
     { name: "good_price", type: "text" },
+    { name: "meal_note", type: "text" },
   ]);
 
   // chores recurrence — add new option values if missing

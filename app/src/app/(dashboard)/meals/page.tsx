@@ -88,7 +88,7 @@ export default function MealsPage() {
   const [saving, setSaving] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [showRecipePicker, setShowRecipePicker] = useState(false);
-  const [shoppingPanel, setShoppingPanel] = useState<{ ingredient: string; meal: string; selected: boolean }[] | null>(null);
+  const [shoppingPanel, setShoppingPanel] = useState<{ ingredient: string; category: string; meal: string; selected: boolean }[] | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartAdded, setCartAdded] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -187,9 +187,17 @@ export default function MealsPage() {
     setMeals((prev) => prev.filter((m) => m.id !== id));
   }
 
+  function parseIngredientLine(line: string): { ingredient: string; category: string } {
+    const sep = line.indexOf(" | ");
+    if (sep >= 0) {
+      return { ingredient: line.substring(0, sep).trim(), category: line.substring(sep + 3).trim() };
+    }
+    return { ingredient: line, category: "Grocery" };
+  }
+
   function openShoppingPanel() {
     const seen = new Set<string>();
-    const items: { ingredient: string; meal: string; selected: boolean }[] = [];
+    const items: { ingredient: string; category: string; meal: string; selected: boolean }[] = [];
     const sorted = [...meals].sort((a, b) => a.date.localeCompare(b.date));
     for (const meal of sorted) {
       const recipe = recipes.find(
@@ -197,8 +205,9 @@ export default function MealsPage() {
       );
       if (recipe?.ingredients) {
         for (const line of recipe.ingredients.split("\n").map((l) => l.trim()).filter(Boolean)) {
-          const key = line.toLowerCase();
-          if (!seen.has(key)) { seen.add(key); items.push({ ingredient: line, meal: meal.recipe_name, selected: true }); }
+          const { ingredient, category } = parseIngredientLine(line);
+          const key = ingredient.toLowerCase();
+          if (!seen.has(key)) { seen.add(key); items.push({ ingredient, category, meal: meal.recipe_name, selected: true }); }
         }
       }
     }
@@ -216,7 +225,13 @@ export default function MealsPage() {
     setAddingToCart(true);
     try {
       await Promise.all(chosen.map((item) =>
-        pb.collection("shopping_items").create({ household: householdId, name: item.ingredient, category: "Meals", checked: false })
+        pb.collection("shopping_items").create({
+          household: householdId,
+          name: item.ingredient,
+          category: item.category,
+          meal_note: item.meal,
+          checked: false,
+        })
       ));
       setShoppingPanel(null);
       setCartAdded(true);
@@ -429,10 +444,11 @@ export default function MealsPage() {
               <textarea
                 value={recipeForm.ingredients}
                 onChange={(e) => setRecipeField("ingredients", e.target.value)}
-                placeholder={"2 slices sourdough\n1 avocado\nLemon juice\nSalt & pepper"}
-                rows={4}
-                className="rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none"
+                placeholder={"2 slices sourdough | Bakery\n1 avocado | Produce\nLemon juice | Condiments\nSalt & pepper | Condiments"}
+                rows={5}
+                className="rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none font-mono"
               />
+              <p className="text-[11px] text-muted-foreground">Add a supermarket category after | — e.g. <span className="font-mono">2 avocados | Produce</span></p>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -619,6 +635,7 @@ export default function MealsPage() {
                   onChange={() => setShoppingPanel((p) => p?.map((it, j) => j === i ? { ...it, selected: !it.selected } : it) ?? null)}
                   className="h-4 w-4 rounded accent-primary shrink-0" />
                 <span className={cn("flex-1 text-sm", !item.selected && "text-muted-foreground line-through")}>{item.ingredient}</span>
+                <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full shrink-0">{item.category}</span>
                 <span className="text-xs text-muted-foreground shrink-0">{item.meal}</span>
               </label>
             ))}

@@ -323,6 +323,11 @@ function ShoppingRow({
           ≤ {item.good_price}
         </span>
       )}
+      {item.meal_note && !item.checked && (
+        <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full shrink-0">
+          🍽️ {item.meal_note}
+        </span>
+      )}
       {addedByName && !isCurrentUser && showAddedBy && (
         <span className="text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full shrink-0">
           {addedByName}
