@@ -55,11 +55,14 @@ function extractDate(s: string): string {
 function extractTime(s: string): string {
   const part = s.includes("T") ? s.split("T")[1] : s.split(" ")[1];
   if (!part || part.startsWith("00:00") || part.startsWith("23:59")) return "";
-  return part.substring(0, 5);
+  const t = part.substring(0, 5);
+  return /^\d{2}:\d{2}$/.test(t) ? t : "";
 }
 
-function formatTime(t: string): string {
+function formatTime(t: string): string | null {
+  if (!/^\d{2}:\d{2}/.test(t)) return null;
   const [h, m] = t.split(":").map(Number);
+  if (isNaN(h) || isNaN(m) || h > 23 || m > 59) return null;
   return `${h % 12 || 12}:${String(m).padStart(2, "0")}${h >= 12 ? "pm" : "am"}`;
 }
 
@@ -75,10 +78,12 @@ function eventTimeLabel(ev: CalendarEvent): string | null {
   const part = ev.start.includes("T") ? ev.start.split("T")[1] : ev.start.split(" ")[1];
   if (!part) return null;
   const t1 = formatTime(part);
+  if (!t1) return null;
   if (!ev.end) return t1;
   const endPart = ev.end.includes("T") ? ev.end.split("T")[1] : ev.end.split(" ")[1];
   if (!endPart || endPart === "23:59:59") return t1;
-  return `${t1}–${formatTime(endPart)}`;
+  const t2 = formatTime(endPart);
+  return t2 ? `${t1}–${t2}` : t1;
 }
 
 function isRecurringOnDate(ev: CalendarEvent, dateStr: string): boolean {
@@ -259,11 +264,14 @@ export default function CalendarPage() {
 
   async function saveEvent() {
     if (!title.trim() || !start || !householdId) return;
+    const validTime = /^\d{2}:\d{2}$/;
+    const cleanStart = validTime.test(startTime) ? startTime : "";
+    const cleanEnd = validTime.test(endTime) ? endTime : "";
     setLoading(true);
     try {
-      const allDay = !startTime;
-      const startVal = startTime ? `${start} ${startTime}:00` : `${start} 00:00:00`;
-      const endVal = endTime ? `${start} ${endTime}:00` : allDay ? `${start} 23:59:59` : startVal;
+      const allDay = !cleanStart;
+      const startVal = cleanStart ? `${start} ${cleanStart}:00` : `${start} 00:00:00`;
+      const endVal = cleanEnd ? `${start} ${cleanEnd}:00` : allDay ? `${start} 23:59:59` : startVal;
       const payload: Record<string, unknown> = {
         title: title.trim(), start: startVal, end: endVal, all_day: allDay,
         notes: notes.trim() || undefined,
