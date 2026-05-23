@@ -197,16 +197,20 @@ export default function ChoresPage() {
       .then((items) => setCompletions(items as unknown as ChoreCompletion[]));
   }, [householdId, weekStart]);
 
+  function dateMatchesDay(stored: string, dateStr: string): boolean {
+    return stored === dateStr || stored.startsWith(dateStr + " ") || stored.startsWith(dateStr + "T");
+  }
+
   function isCompletedOnDate(chore: Chore, dateStr: string): boolean {
     if (chore.type === "everyone") {
-      return completions.some(c => c.chore === chore.id && c.user === (user?.id ?? "") && c.date.startsWith(dateStr));
+      return completions.some(c => c.chore === chore.id && c.user === (user?.id ?? "") && dateMatchesDay(c.date, dateStr));
     }
-    return completions.some(c => c.chore === chore.id && c.date.startsWith(dateStr));
+    return completions.some(c => c.chore === chore.id && dateMatchesDay(c.date, dateStr));
   }
 
   async function toggleForKid(chore: Chore, dateStr: string, kidId: string) {
     const existing = completions.find(c =>
-      c.chore === chore.id && c.date.startsWith(dateStr) && c.user === kidId
+      c.chore === chore.id && dateMatchesDay(c.date, dateStr) && c.user === kidId
     );
     if (existing) {
       await pb.collection("chore_completions").delete(existing.id);
@@ -226,7 +230,7 @@ export default function ChoresPage() {
     if (!isOwner && chore.assignee && chore.assignee !== user.id) return;
     const existing = completions.find(c =>
       c.chore === chore.id &&
-      c.date.startsWith(dateStr) &&
+      dateMatchesDay(c.date, dateStr) &&
       (chore.type !== "everyone" || c.user === user.id)
     );
     if (existing) {
@@ -329,7 +333,7 @@ export default function ChoresPage() {
     const col = choreColor(chore.id);
     const scopeMembers = chore.scope === "kids" ? kidMembers : members;
     const totalDone = chore.type === "everyone"
-      ? completions.filter(c => c.chore === chore.id && c.date.startsWith(dateStr)).length
+      ? completions.filter(c => c.chore === chore.id && dateMatchesDay(c.date, dateStr)).length
       : 0;
 
     return (
@@ -463,7 +467,7 @@ export default function ChoresPage() {
                       <div className="flex gap-2 flex-wrap justify-end">
                         {scopeKids.map(kid => {
                           const kidDone = completions.some(c =>
-                            c.chore === chore.id && c.date.startsWith(adminDay) && c.user === kid.id
+                            c.chore === chore.id && dateMatchesDay(c.date, adminDay) && c.user === kid.id
                           );
                           return (
                             <button
@@ -629,13 +633,19 @@ export default function ChoresPage() {
         <>
           {/* Week navigation */}
           <div className="flex items-center justify-between">
-            <button onClick={() => setWeekStart(addDays(weekStart, -7))}
-              className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
+            <button onClick={() => {
+              const next = addDays(weekStart, -7);
+              setWeekStart(next);
+              if (toDateStr(next) === toDateStr(getMonday(new Date()))) setSelectedDay((new Date().getDay() + 6) % 7);
+            }} className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
               <ChevronLeft className="h-5 w-5 text-muted-foreground" />
             </button>
             <span className="text-sm font-bold text-muted-foreground">{weekLabel}</span>
-            <button onClick={() => setWeekStart(addDays(weekStart, 7))}
-              className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
+            <button onClick={() => {
+              const next = addDays(weekStart, 7);
+              setWeekStart(next);
+              if (toDateStr(next) === toDateStr(getMonday(new Date()))) setSelectedDay((new Date().getDay() + 6) % 7);
+            }} className="p-1.5 rounded-xl hover:bg-muted/60 transition-colors">
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </button>
           </div>
