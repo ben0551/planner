@@ -357,7 +357,10 @@ export async function ensureSchema(): Promise<string[]> {
     const col = fresh[name];
     if (!col) continue;
     if (col.listRule !== AUTH || col.viewRule !== AUTH || col.createRule !== AUTH || col.updateRule !== AUTH || col.deleteRule !== AUTH) {
+      const existingFields = col.fields ?? col.schema ?? [];
       await pbApi(token, `collections/${col.id}`, "PATCH", {
+        schema: existingFields,
+        fields: existingFields,
         listRule: AUTH,
         viewRule: AUTH,
         createRule: AUTH,

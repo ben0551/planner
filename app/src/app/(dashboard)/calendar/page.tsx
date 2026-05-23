@@ -139,7 +139,7 @@ export default function CalendarPage() {
   const [weekStart, setWeekStart] = useState<string>(() => toDateStr(getWeekStart(today, startOnSun)));
   const [weekDayIdx, setWeekDayIdx] = useState(() => {
     const ws = getWeekStart(today, startOnSun);
-    return Math.round((today.getTime() - ws.getTime()) / 86400000);
+    return Math.min(6, Math.floor((today.getTime() - ws.getTime()) / 86400000));
   });
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -608,7 +608,8 @@ export default function CalendarPage() {
               })}
             </div>
             {(() => {
-              const d = weekDays[weekDayIdx];
+              const d = weekDays[Math.min(weekDayIdx, weekDays.length - 1)];
+              if (!d) return null;
               const ds = toDateStr(d);
               const dayEvts = getEventsForDate(ds);
               const dayTsks = getTasksForDate(ds);

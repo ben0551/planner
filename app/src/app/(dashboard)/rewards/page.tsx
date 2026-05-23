@@ -55,7 +55,7 @@ export default function RewardsPage() {
   const [kidBalances, setKidBalances] = useState<KidBalance[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
-  const [goalForm, setGoalForm] = useState({ shared: false, userId: "", userId2: "", title: "", target: 100, reward: "", private: false });
+  const [goalForm, setGoalForm] = useState({ shared: false, userId: "", userIds: [] as string[], title: "", target: 100, reward: "", private: false });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -256,7 +256,7 @@ export default function RewardsPage() {
     setGoalForm({
       shared: isShared,
       userId: isShared ? goal.users![0] : goal.user,
-      userId2: isShared ? goal.users![1] : "",
+      userIds: isShared ? goal.users! : [],
       title: goal.title,
       target: goal.target_points,
       reward: goal.reward_description ?? "",
@@ -268,18 +268,20 @@ export default function RewardsPage() {
   function cancelGoalForm() {
     setShowGoalForm(false);
     setEditingGoalId(null);
-    setGoalForm({ shared: false, userId: "", userId2: "", title: "", target: 100, reward: "", private: false });
+    setGoalForm({ shared: false, userId: "", userIds: [], title: "", target: 100, reward: "", private: false });
   }
 
   async function saveGoal() {
-    if (!goalForm.title.trim() || !goalForm.userId || !householdId) return;
-    if (goalForm.shared && !goalForm.userId2) return;
+    if (!goalForm.title.trim() || !householdId) return;
+    if (!goalForm.shared && !goalForm.userId) return;
+    if (goalForm.shared && goalForm.userIds.length < 2) return;
     setSaving(true);
     try {
-      const users = goalForm.shared ? [goalForm.userId, goalForm.userId2] : [];
+      const users = goalForm.shared ? goalForm.userIds : [];
+      const primaryUser = goalForm.shared ? goalForm.userIds[0] : goalForm.userId;
       const payload = {
         household: householdId,
-        user: goalForm.userId,
+        user: primaryUser,
         users,
         title: goalForm.title.trim(),
         target_points: goalForm.target,
@@ -554,9 +556,33 @@ export default function RewardsPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {goalForm.shared ? (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Participants <span className="text-muted-foreground">(select 2 or more)</span></Label>
+                <div className="flex flex-wrap gap-2">
+                  {memberPoints.map((mp) => {
+                    const checked = goalForm.userIds.includes(mp.member.userId);
+                    return (
+                      <label key={mp.member.userId}
+                        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-xs font-medium transition-colors select-none",
+                          checked ? "bg-primary/10 border-primary text-primary" : "border-border text-muted-foreground hover:bg-muted/30"
+                        )}>
+                        <input type="checkbox" className="hidden" checked={checked}
+                          onChange={(e) => setGoalForm((f) => ({
+                            ...f,
+                            userIds: e.target.checked
+                              ? [...f.userIds, mp.member.userId]
+                              : f.userIds.filter((id) => id !== mp.member.userId),
+                          }))} />
+                        {mp.member.name.split(" ")[0]}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
               <div className="flex flex-col gap-1">
-                <Label className="text-xs">{goalForm.shared ? "First person" : "For"}</Label>
+                <Label className="text-xs">For</Label>
                 <select
                   value={goalForm.userId}
                   onChange={(e) => setGoalForm((f) => ({ ...f, userId: e.target.value }))}
@@ -564,43 +590,15 @@ export default function RewardsPage() {
                 >
                   <option value="">Pick a person…</option>
                   {memberPoints.map((mp) => (
-                    <option key={mp.member.userId} value={mp.member.userId}
-                      disabled={goalForm.shared && mp.member.userId === goalForm.userId2}>
-                      {mp.member.name.split(" ")[0]}
-                    </option>
+                    <option key={mp.member.userId} value={mp.member.userId}>{mp.member.name.split(" ")[0]}</option>
                   ))}
                 </select>
               </div>
-              {goalForm.shared ? (
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs">Second person</Label>
-                  <select
-                    value={goalForm.userId2}
-                    onChange={(e) => setGoalForm((f) => ({ ...f, userId2: e.target.value }))}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="">Pick a person…</option>
-                    {memberPoints.map((mp) => (
-                      <option key={mp.member.userId} value={mp.member.userId}
-                        disabled={mp.member.userId === goalForm.userId}>
-                        {mp.member.name.split(" ")[0]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs">Target pts</Label>
-                  <Input type="number" min={1} value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: parseInt(e.target.value) || 1 }))} />
-                </div>
-              )}
-            </div>
-            {goalForm.shared && (
-              <div className="flex flex-col gap-1">
-                <Label className="text-xs">Combined target pts</Label>
-                <Input type="number" min={1} value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: parseInt(e.target.value) || 1 }))} />
-              </div>
             )}
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">{goalForm.shared ? "Combined target pts" : "Target pts"}</Label>
+              <Input type="number" min={1} value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: parseInt(e.target.value) || 1 }))} />
+            </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs">Goal title</Label>
               <Input value={goalForm.title} onChange={(e) => setGoalForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Stay up late Friday" />
@@ -618,7 +616,7 @@ export default function RewardsPage() {
               </label>
             )}
             <Button size="sm" onClick={saveGoal}
-              disabled={saving || !goalForm.title.trim() || !goalForm.userId || (goalForm.shared && !goalForm.userId2)}>
+              disabled={saving || !goalForm.title.trim() || (!goalForm.shared && !goalForm.userId) || (goalForm.shared && goalForm.userIds.length < 2)}>
               {saving ? "Saving…" : editingGoalId ? "Save changes" : "Add goal"}
             </Button>
           </div>
@@ -642,7 +640,7 @@ export default function RewardsPage() {
               })
               .map((goal) => {
                 const isShared = Array.isArray(goal.users) && goal.users.length >= 2;
-                const sharedMps = isShared ? goal.users!.map((uid) => memberPoints.find((m) => m.member.userId === uid)).filter(Boolean) : null;
+                const sharedMps = isShared ? (goal.users as string[]).map((uid) => memberPoints.find((m) => m.member.userId === uid)).filter(Boolean) : null;
                 const mp = memberPoints.find((m) => m.member.userId === goal.user);
                 const currentPts = isShared
                   ? (sharedMps ?? []).reduce((sum, m) => sum + (m?.totalPoints ?? 0), 0)
