@@ -38,7 +38,8 @@ export default function CalendarPage() {
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("event");
   const [title, setTitle] = useState("");
-  const [start, setStart] = useState("");
+  const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const [start, setStart] = useState(todayDateStr);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState("");
@@ -145,7 +146,7 @@ export default function CalendarPage() {
   function closeEventForm() {
     setShowForm(false);
     setEditingEvent(null);
-    setTitle(""); setStart(""); setStartTime(""); setEndTime(""); setNotes("");
+    setTitle(""); setStart(todayDateStr); setStartTime(""); setEndTime(""); setNotes("");
   }
 
   async function saveEvent() {
@@ -291,7 +292,7 @@ export default function CalendarPage() {
               {(["event", "task"] as FormMode[]).map((m) => (
                 <button
                   key={m}
-                  onClick={() => { setFormMode(m); setTitle(""); setStart(""); setStartTime(""); setEndTime(""); setNotes(""); }}
+                  onClick={() => { setFormMode(m); setTitle(""); setStart(todayDateStr); setStartTime(""); setEndTime(""); setNotes(""); }}
                   className={`px-3 py-1 rounded-md text-xs font-semibold capitalize transition-colors ${
                     formMode === m ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}

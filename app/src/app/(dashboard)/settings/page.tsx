@@ -2,11 +2,12 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient } from "@/lib/pocketbase";
+import { getClient, type ShoppingCatalog } from "@/lib/pocketbase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, UserPlus, ChevronRight, CalendarRange, Database, CalendarDays, Moon, Sun } from "lucide-react";
+import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type CustodyWeek = "odd" | "even" | "";
@@ -49,6 +50,13 @@ function SettingsContent() {
   const [custodySaved, setCustodySaved] = useState(false);
   const [custodyError, setCustodyError] = useState("");
   const [migrating, setMigrating] = useState(false);
+
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<ShoppingCatalog[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogEditId, setCatalogEditId] = useState<string | null>(null);
+  const [catalogDraft, setCatalogDraft] = useState({ category: "", good_price: "" });
 
   useEffect(() => {
     setCustodyWeek((household?.custody_week as CustodyWeek) ?? "");
@@ -125,6 +133,32 @@ function SettingsContent() {
     } finally {
       setMigrating(false);
     }
+  }
+
+  async function loadCatalog() {
+    if (!householdId || catalogItems !== null) return;
+    setCatalogLoading(true);
+    try {
+      const items = await pb.collection("shopping_catalog").getFullList({ filter: `household="${householdId}"`, sort: "name" });
+      setCatalogItems(items as unknown as ShoppingCatalog[]);
+    } finally { setCatalogLoading(false); }
+  }
+
+  async function saveCatalogItem() {
+    if (!catalogEditId) return;
+    await pb.collection("shopping_catalog").update(catalogEditId, {
+      category: catalogDraft.category.trim() || null,
+      good_price: catalogDraft.good_price.trim() || null,
+    });
+    setCatalogItems((prev) => prev?.map((i) =>
+      i.id === catalogEditId ? { ...i, category: catalogDraft.category.trim() || undefined, good_price: catalogDraft.good_price.trim() || undefined } : i
+    ) ?? null);
+    setCatalogEditId(null);
+  }
+
+  async function deleteCatalogItem(id: string) {
+    await pb.collection("shopping_catalog").delete(id);
+    setCatalogItems((prev) => prev?.filter((i) => i.id !== id) ?? null);
   }
 
   async function saveCustodyWeek() {
@@ -339,6 +373,93 @@ function SettingsContent() {
           </div>
         </div>
       )}
+
+      {/* Shopping Catalog */}
+      <div className="rounded-2xl bg-white border border-border shadow-sm overflow-hidden">
+        <button
+          onClick={() => { setShowCatalog((s) => !s); if (!showCatalog) loadCatalog(); }}
+          className="w-full px-4 py-3 flex items-center gap-2 hover:bg-muted/30 transition-colors text-left"
+        >
+          <ShoppingCart className="h-4 w-4 text-primary shrink-0" />
+          <p className="flex-1 text-xs font-bold text-muted-foreground uppercase tracking-wide">Shopping Catalog</p>
+          {showCatalog ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </button>
+        {showCatalog && (
+          <div className="border-t px-4 py-3 flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              Items remembered from your shopping list. Update categories and good prices, or remove items you no longer buy.
+            </p>
+            {catalogLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
+            {catalogItems !== null && (
+              <>
+                <div className="flex items-center gap-2 rounded-xl border border-input bg-background px-3 py-2">
+                  <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <input
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Search catalog…"
+                    className="flex-1 text-sm outline-none bg-transparent"
+                  />
+                  {catalogSearch && (
+                    <button onClick={() => setCatalogSearch("")}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                  )}
+                </div>
+                {catalogItems.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No items yet — they're saved automatically when you add things to a shopping list.</p>
+                )}
+                <div className="flex flex-col divide-y">
+                  {catalogItems
+                    .filter((i) => !catalogSearch || i.name.toLowerCase().includes(catalogSearch.toLowerCase()))
+                    .map((item) =>
+                      catalogEditId === item.id ? (
+                        <div key={item.id} className="flex items-center gap-2 py-2 flex-wrap">
+                          <span className="text-sm font-medium flex-1 min-w-28">{item.name}</span>
+                          <Input
+                            value={catalogDraft.category}
+                            onChange={(e) => setCatalogDraft((d) => ({ ...d, category: e.target.value }))}
+                            placeholder="Category"
+                            className="h-7 w-28 text-xs"
+                          />
+                          <Input
+                            value={catalogDraft.good_price}
+                            onChange={(e) => setCatalogDraft((d) => ({ ...d, good_price: e.target.value }))}
+                            placeholder="≤ good price"
+                            className="h-7 w-28 text-xs"
+                            onKeyDown={(e) => { if (e.key === "Enter") saveCatalogItem(); if (e.key === "Escape") setCatalogEditId(null); }}
+                          />
+                          <button onClick={saveCatalogItem} className="text-primary hover:opacity-70 shrink-0"><Check className="h-4 w-4" /></button>
+                          <button onClick={() => setCatalogEditId(null)} className="text-muted-foreground hover:opacity-70 shrink-0"><X className="h-4 w-4" /></button>
+                        </div>
+                      ) : (
+                        <div key={item.id} className="flex items-center gap-3 py-2 group">
+                          <span className="flex-1 text-sm">{item.name}</span>
+                          {item.category && (
+                            <span className="text-xs text-muted-foreground shrink-0">{item.category}</span>
+                          )}
+                          {item.good_price && (
+                            <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full shrink-0">≤ {item.good_price}</span>
+                          )}
+                          <button
+                            onClick={() => { setCatalogEditId(item.id); setCatalogDraft({ category: item.category ?? "", good_price: item.good_price ?? "" }); }}
+                            className="hidden group-hover:flex text-muted-foreground hover:text-foreground shrink-0"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteCatalogItem(item.id)}
+                            className="hidden group-hover:flex text-muted-foreground hover:text-destructive shrink-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )
+                    )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Owner-only actions */}
       {isOwner && (
