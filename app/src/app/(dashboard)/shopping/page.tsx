@@ -178,8 +178,17 @@ export default function ShoppingPage() {
     if (!selectedListId || !householdId) return;
     const currentList = lists.find((l) => l.id === selectedListId);
     if (!currentList) return;
-    const total = listItems.length;
-    if (!confirm(`Complete this "${currentList.name}" shop? ${total} item${total === 1 ? "" : "s"} will be saved to history and the list cleared.`)) return;
+
+    const uncheckedItems = listItems.filter((i) => !i.checked);
+    const checkedCount = listItems.length - uncheckedItems.length;
+
+    if (!confirm(`Complete this "${currentList.name}" shop? ${checkedCount} checked item${checkedCount === 1 ? "" : "s"} will be saved to history.`)) return;
+
+    const moveUnchecked =
+      uncheckedItems.length > 0 &&
+      confirm(
+        `${uncheckedItems.length} item${uncheckedItems.length === 1 ? " wasn't" : "s weren't"} checked off. Move ${uncheckedItems.length === 1 ? "it" : "them"} to the next shop?`,
+      );
 
     // Assign legacy null-list items to this list if it's the first one
     const isFirst = lists[0].id === selectedListId;
@@ -194,9 +203,22 @@ export default function ShoppingPage() {
     const fresh = await pb.collection("shopping_lists").create({ household: householdId, name: currentList.name, archived: false });
     const freshList = fresh as unknown as ShoppingList;
 
+    if (moveUnchecked && uncheckedItems.length > 0) {
+      await Promise.all(uncheckedItems.map((i) =>
+        pb.collection("shopping_items").update(i.id, { list: freshList.id, checked: false })
+      ));
+    }
+
+    const currentIds = new Set(listItems.map((i) => i.id));
+    const uncheckedIds = new Set(uncheckedItems.map((i) => i.id));
+
     setLists((prev) => prev.map((l) => l.id === selectedListId ? freshList : l));
     setSelectedListId(freshList.id);
-    setItems((prev) => prev.filter((i) => !(i.list === selectedListId || (!i.list && isFirst))));
+    setItems((prev) =>
+      prev
+        .filter((i) => !currentIds.has(i.id) || (moveUnchecked && uncheckedIds.has(i.id)))
+        .map((i) => uncheckedIds.has(i.id) ? { ...i, list: freshList.id, checked: false } : i)
+    );
 
     if (showHistory) {
       setArchivedLists((prev) => [{ ...currentList, archived: true, archived_at: now }, ...prev]);
