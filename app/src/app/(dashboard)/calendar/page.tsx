@@ -328,7 +328,10 @@ export default function CalendarPage() {
                     <Label htmlFor="ev-start-time">Start time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input
                       id="ev-start-time"
-                      type="time"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="HH:MM e.g. 09:00"
+                      maxLength={5}
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
                     />
@@ -337,7 +340,10 @@ export default function CalendarPage() {
                     <Label htmlFor="ev-end-time">End time <span className="text-muted-foreground font-normal">(optional)</span></Label>
                     <Input
                       id="ev-end-time"
-                      type="time"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="HH:MM e.g. 20:00"
+                      maxLength={5}
                       value={endTime}
                       onChange={(e) => setEndTime(e.target.value)}
                     />
