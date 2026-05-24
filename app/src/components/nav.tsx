@@ -32,12 +32,12 @@ const navItems = [
   { href: "/",          label: "Today",        icon: Home,            emoji: "🏠" },
   { href: "/chores",    label: "Chores",        icon: ListChecks,      emoji: "✅" },
   { href: "/progress",  label: "Progress",      icon: TrendingUp,      emoji: "📊" },
-  { href: "/meals",     label: "Meal Planner",  icon: UtensilsCrossed, emoji: "🍽️" },
+  { href: "/rewards",   label: "Rewards",       icon: Trophy,          emoji: "🏆" },
   { href: "/shopping",  label: "Shopping List", icon: ShoppingCart,    emoji: "🛒" },
   { href: "/calendar",  label: "Calendar",      icon: CalendarDays,    emoji: "📅" },
+  { href: "/meals",     label: "Meal Planner",  icon: UtensilsCrossed, emoji: "🍽️" },
   { href: "/tasks",     label: "Tasks",         icon: ClipboardList,   emoji: "📋" },
   { href: "/notes",     label: "Notes",         icon: StickyNote,      emoji: "📝" },
-  { href: "/rewards",   label: "Rewards",       icon: Trophy,          emoji: "🏆" },
   { href: "/settings",  label: "Settings",      icon: Settings,        emoji: "⚙️" },
 ];
 
