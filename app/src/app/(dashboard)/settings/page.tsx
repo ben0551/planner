@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useAuth } from "@/context/auth";
 import { getClient, type ShoppingCatalog } from "@/lib/pocketbase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X, Palette } from "lucide-react";
+import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X, Palette, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { THEMES, applyTheme } from "@/lib/themes";
 
@@ -69,6 +69,12 @@ function SettingsContent() {
 
   const [kidsCanCheckShopping, setKidsCanCheckShopping] = useState(false);
   const [kidsCanCheckSaving, setKidsCanCheckSaving] = useState(false);
+
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importLog, setImportLog] = useState<string[] | null>(null);
+  const [importError, setImportError] = useState("");
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogItems, setCatalogItems] = useState<ShoppingCatalog[] | null>(null);
@@ -142,6 +148,108 @@ function SettingsContent() {
     });
     setGcalStatus({ connected: false });
     setGcalMsg("Disconnected.");
+  }
+
+  async function exportData() {
+    if (!householdId) return;
+    setExporting(true);
+    try {
+      const COLLECTIONS = [
+        "meal_recipes", "meals", "shopping_catalog", "shopping_items",
+        "chores", "goals", "calendar_events", "notes", "tasks",
+      ];
+      const data: Record<string, any[]> = {};
+
+      for (const name of COLLECTIONS) {
+        try {
+          data[name] = await pb.collection(name).getFullList({ filter: `household="${householdId}"` });
+        } catch {
+          data[name] = [];
+        }
+      }
+
+      const choreIds = (data.chores ?? []).map((c: any) => c.id);
+      if (choreIds.length > 0) {
+        const f = choreIds.map((id: string) => `chore="${id}"`).join("||");
+        try { data.chore_completions = await pb.collection("chore_completions").getFullList({ filter: f }); }
+        catch { data.chore_completions = []; }
+      } else {
+        data.chore_completions = [];
+      }
+
+      const blob = new Blob([JSON.stringify({ version: 1, exported_at: new Date().toISOString(), household: { name: household?.name }, data }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `planner-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function importData(file: File) {
+    setImporting(true);
+    setImportLog(null);
+    setImportError("");
+    try {
+      const exportObj = JSON.parse(await file.text());
+      if (!exportObj.version || !exportObj.data) throw new Error("Invalid export file.");
+
+      const log: string[] = [];
+      const idMap: Record<string, string> = {};
+      const STRIP = new Set(["id", "collectionId", "collectionName", "created", "updated", "expand"]);
+      const USER_FIELDS = new Set(["user", "assignee", "assigned_to", "created_by", "added_by"]);
+
+      function prep(record: any): any {
+        const r: any = { household: householdId };
+        for (const [k, v] of Object.entries(record)) {
+          if (!STRIP.has(k) && !USER_FIELDS.has(k)) r[k] = v;
+        }
+        return r;
+      }
+
+      const ORDER = [
+        "meal_recipes", "meals", "shopping_catalog", "shopping_items",
+        "chores", "goals", "calendar_events", "notes", "tasks",
+      ];
+      for (const name of ORDER) {
+        const records: any[] = exportObj.data[name] ?? [];
+        if (!records.length) continue;
+        let n = 0;
+        for (const rec of records) {
+          try {
+            const created = await pb.collection(name).create(prep(rec));
+            if (rec.id) idMap[rec.id] = created.id;
+            n++;
+          } catch (e: any) {
+            log.push(`⚠ ${name}: ${e?.message ?? "failed"}`);
+          }
+        }
+        log.push(`✓ ${name}: ${n} imported`);
+      }
+
+      const completions: any[] = exportObj.data.chore_completions ?? [];
+      if (completions.length) {
+        let n = 0;
+        for (const rec of completions) {
+          const newChore = idMap[rec.chore];
+          if (!newChore) continue;
+          try {
+            await pb.collection("chore_completions").create({ chore: newChore, date: rec.date, points: rec.points });
+            n++;
+          } catch { /* skip */ }
+        }
+        log.push(`✓ chore_completions: ${n} imported`);
+      }
+
+      setImportLog(log);
+    } catch (err: any) {
+      setImportError(err?.message ?? "Import failed.");
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function runMigration() {
@@ -481,6 +589,52 @@ function SettingsContent() {
             <Button size="sm" variant="outline" className="self-start rounded-xl" disabled={migrating} onClick={runMigration}>
               {migrating ? "Syncing…" : migrateLog ? "✓ Synced" : "Sync Database"}
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Data export / import — owners only */}
+      {isOwner && (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
+            <Download className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Data Export &amp; Import</p>
+          </div>
+          <div className="px-4 py-3 flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              Export all your household data as a JSON file. You can import it into a self-hosted Planner instance. Imported records are linked to the current household; user assignments are stripped.
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="rounded-xl gap-1.5" disabled={exporting} onClick={exportData}>
+                <Download className="h-3.5 w-3.5" />
+                {exporting ? "Exporting…" : "Export all data"}
+              </Button>
+              <Button size="sm" variant="outline" className="rounded-xl gap-1.5" disabled={importing} onClick={() => importFileRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5" />
+                {importing ? "Importing…" : "Import from file"}
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  if (!confirm(`Import data from "${file.name}" into this household? Existing records won't be deleted.`)) return;
+                  importData(file);
+                }}
+              />
+            </div>
+
+            {importError && <p className="text-xs text-destructive">{importError}</p>}
+            {importLog && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                {importLog.map((line, i) => <p key={i}>{line}</p>)}
+              </div>
+            )}
           </div>
         </div>
       )}
