@@ -1,10 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, usePermission } from "@/context/auth";
 import type { Permissions } from "@/lib/pocketbase";
-import { getTheme } from "@/lib/themes";
+import { getTheme, getDynamicGradient, getDynamicPrimary } from "@/lib/themes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -58,6 +59,20 @@ export function Nav() {
   const { user, membership, logout } = useAuth();
   const theme = getTheme(membership?.theme);
 
+  const [liveGradient, setLiveGradient] = useState(theme.gradient);
+  useEffect(() => {
+    if (theme.name !== "dynamic") { setLiveGradient(theme.gradient); return; }
+    const tick = () => {
+      setLiveGradient(getDynamicGradient());
+      const p = getDynamicPrimary();
+      document.documentElement.style.setProperty("--primary", p);
+      document.documentElement.style.setProperty("--ring", p);
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [theme.name, theme.gradient]);
+
   function canSee(href: string): boolean {
     const key = PAGE_PERMISSION_KEY[href];
     if (!key) return true; // no restriction (home, settings)
@@ -77,7 +92,7 @@ export function Nav() {
     <>
       {/* ── Desktop sidebar ─────────────────────────────── */}
       <aside className="hidden md:flex flex-col w-60 shrink-0 overflow-y-auto"
-        style={{ background: theme.gradient }}>
+        style={{ background: liveGradient }}>
 
         {/* Logo */}
         <div className="px-5 pt-6 pb-4">
@@ -131,7 +146,7 @@ export function Nav() {
       {/* ── Mobile top bar ──────────────────────────────── */}
       <header
         className="md:hidden flex items-center justify-between px-4 h-13 sticky top-0 z-40"
-        style={{ background: theme.gradient.replace("175deg", "90deg") }}
+        style={{ background: liveGradient.replace("175deg", "90deg") }}
       >
         <span className="font-black text-base tracking-tight text-white">✨ Planner</span>
         <DropdownMenu>

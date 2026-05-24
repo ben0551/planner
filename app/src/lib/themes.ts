@@ -28,6 +28,40 @@ const SLOTH_SVG = "linear-gradient(rgba(0,0,0,0.25),rgba(0,0,0,0.25)), url(\"dat
 // Candy: bright lollipops with a dark overlay so text stays readable
 const CANDY_SVG = "linear-gradient(rgba(90,0,70,0.5),rgba(70,0,100,0.5)), url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Crect width='200' height='300' fill='%23fce7f3'/%3E%3Ccircle cx='50' cy='75' r='38' fill='%23f9a8d4'/%3E%3Ccircle cx='50' cy='75' r='38' fill='none' stroke='%23f472b6' stroke-width='10' stroke-dasharray='20,12'/%3E%3Ccircle cx='50' cy='75' r='12' fill='%23fbbf24' opacity='.7'/%3E%3Crect x='46' y='111' width='8' height='65' rx='4' fill='white'/%3E%3Ccircle cx='155' cy='185' r='30' fill='%23c4b5fd'/%3E%3Ccircle cx='155' cy='185' r='30' fill='none' stroke='%238b5cf6' stroke-width='8' stroke-dasharray='16,10'/%3E%3Ccircle cx='155' cy='185' r='10' fill='%23fbbf24' opacity='.7'/%3E%3Crect x='151' y='213' width='7' height='55' rx='3.5' fill='white'/%3E%3Ccircle cx='165' cy='55' r='22' fill='%23fde68a'/%3E%3Ccircle cx='165' cy='55' r='22' fill='none' stroke='%23f59e0b' stroke-width='6' stroke-dasharray='12,7'/%3E%3Crect x='162' y='75' width='6' height='38' rx='3' fill='white'/%3E%3Cpath d='M28,210 Q22,185 32,162 Q38,140 30,118 Q24,102 28,88' stroke='%23fecdd3' stroke-width='20' fill='none' stroke-linecap='round'/%3E%3Cpath d='M28,210 Q22,185 32,162 Q38,140 30,118 Q24,102 28,88' stroke='%23f43f5e' stroke-width='7' fill='none' stroke-linecap='round' stroke-dasharray='22,16'/%3E%3C/svg%3E\") center / cover no-repeat";
 
+// Dynamic time-of-day helpers
+export type TimeOfDay = 'dawn' | 'morning' | 'afternoon' | 'golden' | 'dusk' | 'night';
+
+export function getTimeOfDay(hour = new Date().getHours()): TimeOfDay {
+  if (hour >= 5  && hour < 7)  return 'dawn';
+  if (hour >= 7  && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 16) return 'afternoon';
+  if (hour >= 16 && hour < 19) return 'golden';
+  if (hour >= 19 && hour < 21) return 'dusk';
+  return 'night';
+}
+
+export function getDynamicGradient(hour?: number): string {
+  switch (getTimeOfDay(hour)) {
+    case 'dawn':      return "radial-gradient(ellipse at 50% 120%, rgba(251,191,36,0.6) 0%, transparent 60%), linear-gradient(175deg, #4c1d95 0%, #be185d 50%, #f97316 100%)";
+    case 'morning':   return "radial-gradient(ellipse at 80% 0%, rgba(254,240,138,0.5) 0%, transparent 50%), linear-gradient(175deg, #0284c7 0%, #0ea5e9 60%, #7dd3fc 100%)";
+    case 'afternoon': return "radial-gradient(ellipse at 70% 10%, rgba(255,255,255,0.3) 0%, transparent 40%), linear-gradient(175deg, #0369a1 0%, #0284c7 50%, #0ea5e9 100%)";
+    case 'golden':    return "radial-gradient(ellipse at 90% 80%, rgba(251,191,36,0.7) 0%, transparent 50%), linear-gradient(175deg, #92400e 0%, #b45309 30%, #f97316 70%, #fbbf24 100%)";
+    case 'dusk':      return "radial-gradient(ellipse at 50% 100%, rgba(249,115,22,0.4) 0%, transparent 50%), linear-gradient(175deg, #4c1d95 0%, #7c3aed 40%, #c026d3 70%, #f43f5e 100%)";
+    case 'night':     return "radial-gradient(ellipse at 80% 15%, rgba(255,255,255,0.15) 0%, transparent 35%), linear-gradient(175deg, #0f0a2e 0%, #1e1b4b 60%, #1e3a5f 100%)";
+  }
+}
+
+export function getDynamicPrimary(hour?: number): string {
+  switch (getTimeOfDay(hour)) {
+    case 'dawn':      return "oklch(0.58 0.22 50)";
+    case 'morning':   return "oklch(0.55 0.20 220)";
+    case 'afternoon': return "oklch(0.50 0.18 220)";
+    case 'golden':    return "oklch(0.62 0.22 65)";
+    case 'dusk':      return "oklch(0.52 0.25 300)";
+    case 'night':     return "oklch(0.35 0.18 260)";
+  }
+}
+
 export const THEMES: Theme[] = [
   // ── Clean / adult themes ────────────────────────────────────────
   {
@@ -94,6 +128,14 @@ export const THEMES: Theme[] = [
     primary: "oklch(0.55 0.26 330)",
     primaryFg: "oklch(1 0 0)",
   },
+  {
+    name: "dynamic",
+    label: "Time of Day",
+    emoji: "🌅",
+    gradient: getDynamicGradient(),
+    primary: getDynamicPrimary(),
+    primaryFg: "oklch(1 0 0)",
+  },
   // ── Illustrated kid themes ────────────────────────────────────────
   {
     name: "space",
@@ -146,8 +188,9 @@ export function getTheme(name: string | undefined): Theme {
 export function applyTheme(name: string | undefined) {
   const theme = getTheme(name);
   const root = document.documentElement;
-  root.style.setProperty("--primary", theme.primary);
+  const primary = name === "dynamic" ? getDynamicPrimary() : theme.primary;
+  root.style.setProperty("--primary", primary);
   root.style.setProperty("--primary-foreground", theme.primaryFg);
-  root.style.setProperty("--ring", theme.primary);
+  root.style.setProperty("--ring", primary);
   root.dataset.theme = theme.name;
 }
