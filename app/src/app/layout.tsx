@@ -11,8 +11,14 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Planner",
+  title: "✨ Planner",
   description: "Your household planner",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Planner",
+  },
 };
 
 export default function RootLayout({
@@ -22,6 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${nunito.variable} h-full antialiased`}>
+      <head>
+        <meta name="theme-color" content="#7c3aed" />
+        <link rel="apple-touch-icon" href="/icon.svg" />
+      </head>
       <body className="h-full">
         <script
           dangerouslySetInnerHTML={{

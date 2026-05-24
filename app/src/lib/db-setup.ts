@@ -48,7 +48,7 @@ export async function ensureSchema(): Promise<string[]> {
   }
 
   // Collections that should have authenticated-only access
-  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions"]);
+  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions", "push_subscriptions"]);
   const AUTH_RULE = '@request.auth.id != ""';
 
   async function addMissingFields(name: string, newFields: any[]) {
@@ -263,6 +263,17 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "amount", type: "number", required: true },
       { name: "description", type: "text" },
       { name: "type", ...sel(["allowance", "purchase", "points_conversion"]) },
+    ],
+  });
+
+  // push_subscriptions: stores Web Push subscriptions per household (admin-authed writes only, but rules applied below)
+  await ensureCollection({
+    name: "push_subscriptions",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "endpoint", type: "text", required: true },
+      { name: "p256dh", type: "text" },
+      { name: "auth", type: "text" },
     ],
   });
 
