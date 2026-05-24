@@ -76,9 +76,13 @@ export async function ensureSchema(): Promise<string[]> {
     const ruleFields = AUTH_COLS.has(name)
       ? { listRule: AUTH_RULE, viewRule: AUTH_RULE, createRule: AUTH_RULE, updateRule: AUTH_RULE, deleteRule: AUTH_RULE }
       : {};
-    await pbApi(token, `collections/${col.id}`, "PATCH", { schema: updated, fields: updated, ...ruleFields });
-    toAdd.forEach((f) => log.push(`${name}: added field ${f.name}`));
-    byName[name] = { ...col, schema: updated, fields: updated };
+    try {
+      await pbApi(token, `collections/${col.id}`, "PATCH", { schema: updated, fields: updated, ...ruleFields });
+      toAdd.forEach((f) => log.push(`${name}: added field ${f.name}`));
+      byName[name] = { ...col, schema: updated, fields: updated };
+    } catch (err: any) {
+      log.push(`WARNING: ${name}: could not update fields — ${String(err.message).slice(0, 120)}`);
+    }
   }
 
   // ── create missing collections (order matters for relations) ──

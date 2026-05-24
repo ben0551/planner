@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X, Palette, Download, Upload } from "lucide-react";
+import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X, Palette, Download, Upload, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { THEMES, applyTheme } from "@/lib/themes";
 
@@ -28,7 +28,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, membership, householdId, updateMembershipTheme } = useAuth();
+  const { user, membership, householdId, updateMembershipTheme, isAdmin } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pb = getClient();
@@ -110,6 +110,36 @@ function SettingsContent() {
   const [gcalCredsSaving, setGcalCredsSaving] = useState(false);
   const [gcalCredsMsg, setGcalCredsMsg] = useState("");
   const [gcalShowCreds, setGcalShowCreds] = useState(false);
+
+  const [allowSignups, setAllowSignups] = useState(true);
+  const [requireApproval, setRequireApproval] = useState(false);
+  const [signupSettingsSaving, setSignupSettingsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/admin/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        setAllowSignups(d.allow_signups !== false);
+        setRequireApproval(d.require_approval === true);
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  async function saveSignupSetting(key: "allow_signups" | "require_approval", value: boolean) {
+    setSignupSettingsSaving(true);
+    try {
+      await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pb.authStore.token}` },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (key === "allow_signups") setAllowSignups(value);
+      else setRequireApproval(value);
+    } finally {
+      setSignupSettingsSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!householdId || !isOwner) return;
@@ -825,6 +855,52 @@ function SettingsContent() {
               <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
                 kidsCanCheckShopping ? "translate-x-6" : "translate-x-1")} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Instance admin — signup controls */}
+      {isAdmin && (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 border-b flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Instance Admin</p>
+          </div>
+          <div className="flex flex-col divide-y">
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Allow new registrations</p>
+                <p className="text-xs text-muted-foreground">When off, the registration page is disabled.</p>
+              </div>
+              <button
+                onClick={() => saveSignupSetting("allow_signups", !allowSignups)}
+                disabled={signupSettingsSaving}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                  allowSignups ? "bg-primary" : "bg-muted"
+                )}
+              >
+                <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  allowSignups ? "translate-x-6" : "translate-x-1")} />
+              </button>
+            </div>
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Require approval</p>
+                <p className="text-xs text-muted-foreground">New households must be approved before they can use the app.</p>
+              </div>
+              <button
+                onClick={() => saveSignupSetting("require_approval", !requireApproval)}
+                disabled={signupSettingsSaving}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                  requireApproval ? "bg-primary" : "bg-muted"
+                )}
+              >
+                <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  requireApproval ? "translate-x-6" : "translate-x-1")} />
+              </button>
+            </div>
           </div>
         </div>
       )}
