@@ -91,6 +91,7 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "custody_week", type: "text" },
       { name: "week_start", type: "text" },
       { name: "kids_can_check_shopping", type: "bool" },
+      { name: "status", type: "text" },
     ],
   });
 
@@ -276,12 +277,29 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
+  // app_settings: global admin-only settings, no user-level access rules
+  await ensureCollection({
+    name: "app_settings",
+    fields: [
+      { name: "allow_signups", type: "bool" },
+      { name: "require_approval", type: "bool" },
+    ],
+  });
+  try {
+    const existing = await pbApi(token, "collections/app_settings/records?perPage=1&skipTotal=1");
+    if (!existing.items?.length) {
+      await pbApi(token, "collections/app_settings/records", "POST", { allow_signups: true, require_approval: false });
+      log.push("app_settings: created default record");
+    }
+  } catch { /* ignore — collection may not be accessible yet on first run */ }
+
   // ── add fields missing from existing collections (upgrades) ──
 
   await addMissingFields("households", [
     { name: "custody_week", type: "text" },
     { name: "week_start", type: "text" },
     { name: "kids_can_check_shopping", type: "bool" },
+    { name: "status", type: "text" },
   ]);
   await addMissingFields("memberships", [
     { name: "permissions", type: "json" },

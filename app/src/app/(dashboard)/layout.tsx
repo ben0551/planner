@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, setupRequired, refreshMembership, logout } = useAuth();
+  const { user, loading, setupRequired, householdStatus, logout, refreshMembership } = useAuth();
   const router = useRouter();
 
   const [householdName, setHouseholdName] = useState("");
@@ -55,6 +55,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) return null;
+
+  if (householdStatus === "pending") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+        <div className="w-full max-w-sm bg-card rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-4 text-center">
+          <div className="text-4xl">⏳</div>
+          <h1 className="text-lg font-bold">Awaiting approval</h1>
+          <p className="text-sm text-muted-foreground">
+            Your household has been created and is waiting for the admin to approve it. Check back soon.
+          </p>
+          <button onClick={logout} className="text-xs text-muted-foreground hover:underline">Sign out</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (householdStatus === "rejected") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
+        <div className="w-full max-w-sm bg-card rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-4 text-center">
+          <div className="text-4xl">🚫</div>
+          <h1 className="text-lg font-bold">Access not approved</h1>
+          <p className="text-sm text-muted-foreground">
+            Your household registration was not approved. Contact the admin if you think this is a mistake.
+          </p>
+          <button onClick={logout} className="text-xs text-muted-foreground hover:underline">Sign out</button>
+        </div>
+      </div>
+    );
+  }
 
   if (setupRequired) {
     return (

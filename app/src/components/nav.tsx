@@ -27,6 +27,7 @@ import {
   ClipboardList,
   StickyNote,
   TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
 
 const navItems = [
@@ -56,7 +57,7 @@ const PAGE_PERMISSION_KEY: Record<string, keyof Permissions | undefined> = {
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, membership, logout } = useAuth();
+  const { user, membership, isAdmin, logout } = useAuth();
   const theme = getTheme(membership?.theme);
 
   const [liveGradient, setLiveGradient] = useState(theme.gradient);
@@ -122,6 +123,22 @@ export function Nav() {
           })}
         </nav>
 
+        {/* Admin link */}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
+              pathname === "/admin"
+                ? "bg-white text-violet-700 shadow-sm"
+                : "text-violet-100 hover:text-white hover:bg-white/15"
+            )}
+          >
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            Admin
+          </Link>
+        )}
+
         {/* User section */}
         <div className="px-3 py-4 mt-2 border-t border-white/20 flex flex-col gap-1">
           <div className="flex items-center gap-3 px-3 py-2">
@@ -162,6 +179,9 @@ export function Nav() {
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/settings")}>Settings</DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => router.push("/admin")}>Admin</DropdownMenuItem>
+            )}
             {membership?.role === "owner" && (
               <>
                 <DropdownMenuItem onClick={() => router.push("/settings/members")}>Members</DropdownMenuItem>

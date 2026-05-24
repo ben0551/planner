@@ -51,6 +51,13 @@ export interface Household {
   custody_week?: "odd" | "even" | "";
   week_start?: "mon" | "sun";
   kids_can_check_shopping?: boolean;
+  status?: "active" | "pending" | "rejected" | "";
+}
+
+export interface AppSettings {
+  id: string;
+  allow_signups: boolean;
+  require_approval: boolean;
 }
 
 export interface Membership {

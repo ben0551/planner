@@ -11,6 +11,8 @@ interface AuthContextValue {
   householdId: string | null;
   loading: boolean;
   setupRequired: boolean;
+  isAdmin: boolean;
+  householdStatus: string;
   logout: () => void;
   refreshMembership: () => void;
   updateMembershipTheme: (theme: string) => void;
@@ -22,6 +24,8 @@ const AuthContext = createContext<AuthContextValue>({
   householdId: null,
   loading: true,
   setupRequired: false,
+  isAdmin: false,
+  householdStatus: "active",
   logout: () => {},
   refreshMembership: () => {},
   updateMembershipTheme: () => {},
@@ -123,6 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applyTheme(undefined); // reset to default violet
   }
 
+  const isAdmin = Boolean(
+    user?.email && process.env.NEXT_PUBLIC_ADMIN_EMAIL && user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
+  );
+  const householdStatus = membership?.expand?.household?.status || "active";
+
   return (
     <AuthContext.Provider
       value={{
@@ -131,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         householdId: membership?.household ?? null,
         loading,
         setupRequired,
+        isAdmin,
+        householdStatus,
         logout,
         refreshMembership,
         updateMembershipTheme,

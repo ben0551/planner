@@ -2,6 +2,26 @@ const PB_URL = process.env.PB_INTERNAL_URL ?? "http://localhost:8090";
 
 export { PB_URL };
 
+export async function getAuthEmail(authHeader: string | null): Promise<string | null> {
+  if (!authHeader) return null;
+  try {
+    const res = await fetch(`${PB_URL}/api/collections/users/auth-refresh`, {
+      method: "POST",
+      headers: { Authorization: authHeader },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.record?.email as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function isAdminEmail(email: string | null): boolean {
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  return Boolean(adminEmail && email === adminEmail);
+}
+
 export async function getPbAdminToken(): Promise<string> {
   const email = process.env.PB_ADMIN_EMAIL;
   const password = process.env.PB_ADMIN_PASSWORD;

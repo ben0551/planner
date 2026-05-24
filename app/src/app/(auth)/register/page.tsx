@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getClient } from "@/lib/pocketbase";
@@ -29,11 +29,28 @@ function RegisterForm() {
   const [householdName, setHouseholdName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signupsOpen, setSignupsOpen] = useState(true);
+  const [requireApproval, setRequireApproval] = useState(false);
 
   const isInvite = Boolean(inviteToken);
 
+  useEffect(() => {
+    if (isInvite) return;
+    fetch("/api/admin/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        setSignupsOpen(d.allow_signups !== false);
+        setRequireApproval(d.require_approval === true);
+      })
+      .catch(() => {});
+  }, [isInvite]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isInvite && !signupsOpen) {
+      setError("New signups are not currently open.");
+      return;
+    }
     setError("");
     setLoading(true);
     const pb = getClient();
@@ -65,6 +82,7 @@ function RegisterForm() {
         const household = await pb.collection("households").create({
           name: householdName || `${name}'s Home`,
           invite_token: randomUUID(),
+          status: requireApproval ? "pending" : "active",
         });
         await pb.collection("memberships").create({
           user: user.id,
@@ -97,6 +115,9 @@ function RegisterForm() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
+            {!isInvite && !signupsOpen && (
+              <p className="text-sm text-destructive font-medium">Signups are currently closed.</p>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="name">Your name</Label>
