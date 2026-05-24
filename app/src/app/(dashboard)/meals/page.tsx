@@ -252,6 +252,26 @@ export default function MealsPage() {
           list: targetListId || undefined,
         })
       ));
+
+      // Upsert each ingredient into the catalog so it appears in autocomplete
+      try {
+        const existing = await pb.collection("shopping_catalog").getFullList({
+          filter: `household="${householdId}"`,
+        });
+        const existingNames = new Set((existing as any[]).map((e) => (e.name as string).toLowerCase()));
+        await Promise.all(
+          chosen
+            .filter((i) => !existingNames.has(i.ingredient.trim().toLowerCase()))
+            .map((i) =>
+              pb.collection("shopping_catalog").create({
+                household: householdId,
+                name: i.ingredient.trim(),
+                category: i.category || undefined,
+              })
+            )
+        );
+      } catch { /* catalog update is best-effort */ }
+
       setShoppingPanel(null);
       setCartAdded(true);
       setTimeout(() => setCartAdded(false), 3000);
