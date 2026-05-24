@@ -28,7 +28,7 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, membership, householdId, refreshMembership } = useAuth();
+  const { user, membership, householdId, updateMembershipTheme } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pb = getClient();
@@ -51,9 +51,9 @@ function SettingsContent() {
   async function saveTheme(name: string) {
     setThemeName(name);
     applyTheme(name);
+    updateMembershipTheme(name);
     if ((membership as any)?.id) {
       await pb.collection("memberships").update((membership as any).id, { theme: name });
-      refreshMembership();
     }
   }
 

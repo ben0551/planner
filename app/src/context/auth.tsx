@@ -13,6 +13,7 @@ interface AuthContextValue {
   setupRequired: boolean;
   logout: () => void;
   refreshMembership: () => void;
+  updateMembershipTheme: (theme: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   setupRequired: false,
   logout: () => {},
   refreshMembership: () => {},
+  updateMembershipTheme: () => {},
 });
 
 function cacheHousehold(householdId: string, householdName: string, members: CachedMember[]) {
@@ -55,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function refreshMembership() {
     setMembershipTick((t) => t + 1);
+  }
+
+  function updateMembershipTheme(theme: string) {
+    setMembership((prev) => prev ? { ...prev, theme } : prev);
   }
 
   useEffect(() => {
@@ -127,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setupRequired,
         logout,
         refreshMembership,
+        updateMembershipTheme,
       }}
     >
       {children}
