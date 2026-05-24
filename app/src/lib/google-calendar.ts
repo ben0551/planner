@@ -17,25 +17,18 @@ export interface GoogleCalendar {
   primary?: boolean;
 }
 
-function clientId() {
-  const v = process.env.GOOGLE_CLIENT_ID;
-  if (!v) throw new Error("GOOGLE_CLIENT_ID not set");
-  return v;
-}
-
-function clientSecret() {
-  const v = process.env.GOOGLE_CLIENT_SECRET;
-  if (!v) throw new Error("GOOGLE_CLIENT_SECRET not set");
-  return v;
+export interface GoogleCreds {
+  clientId: string;
+  clientSecret: string;
 }
 
 export function getRedirectUri(): string {
   return `${process.env.APP_URL ?? "http://localhost:3000"}/api/google-calendar/callback`;
 }
 
-export function getAuthUrl(householdId: string): string {
+export function getAuthUrl(householdId: string, creds: GoogleCreds): string {
   const params = new URLSearchParams({
-    client_id: clientId(),
+    client_id: creds.clientId,
     redirect_uri: getRedirectUri(),
     response_type: "code",
     scope: "https://www.googleapis.com/auth/calendar",
@@ -48,13 +41,14 @@ export function getAuthUrl(householdId: string): string {
 
 export async function exchangeCode(
   code: string,
+  creds: GoogleCreds,
 ): Promise<{ access_token: string; refresh_token: string }> {
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: clientId(),
-      client_secret: clientSecret(),
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
       code,
       redirect_uri: getRedirectUri(),
       grant_type: "authorization_code",
@@ -64,13 +58,13 @@ export async function exchangeCode(
   return res.json();
 }
 
-export async function getAccessToken(refreshToken: string): Promise<string> {
+export async function getAccessToken(refreshToken: string, creds: GoogleCreds): Promise<string> {
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: clientId(),
-      client_secret: clientSecret(),
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),

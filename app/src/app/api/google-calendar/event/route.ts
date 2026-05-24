@@ -1,44 +1,33 @@
 import { type NextRequest } from "next/server";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
-import {
-  getAccessToken,
-  createGoogleEvent,
-  deleteGoogleEvent,
-  toGoogleEvent,
-} from "@/lib/google-calendar";
+import { getAccessToken, createGoogleEvent, deleteGoogleEvent, toGoogleEvent } from "@/lib/google-calendar";
+import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
 
-async function getTokensForHousehold(adminToken: string, householdId: string) {
-  const res = await fetch(
-    `${PB_URL}/api/collections/google_tokens/records?filter=${encodeURIComponent(`household="${householdId}"`)}&perPage=1`,
-    { headers: { Authorization: adminToken } },
-  );
-  const data = await res.json();
-  if (!data.items?.length) return null;
-  const rec = data.items[0];
-  if (!rec.calendar_id) return null;
-  return rec;
+async function pbAdmin(token: string, path: string, method = "GET", body?: object) {
+  const res = await fetch(`${PB_URL}/api/${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", Authorization: token },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`PB ${method} ${path}: ${await res.text()}`);
+  return res.status === 204 ? null : res.json();
 }
 
-// Push a Planner event to Google Calendar, return the Google event ID
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { householdId, plannerEventId, title, start, end, allDay, notes } = body;
-
+    const { householdId, plannerEventId, title, start, end, allDay, notes } = await req.json();
     const adminToken = await getPbAdminToken();
-    const rec = await getTokensForHousehold(adminToken, householdId);
-    if (!rec) return Response.json({ skipped: true });
+    const rec = await getGoogleTokenRecord(adminToken, householdId);
+    if (!rec?.calendar_id) return Response.json({ skipped: true });
 
-    const accessToken = await getAccessToken(rec.refresh_token);
+    const creds = await getGoogleCredentials(householdId);
+    const accessToken = await getAccessToken(rec.refresh_token, creds);
     const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes });
     const created = await createGoogleEvent(accessToken, rec.calendar_id, gEvent);
 
-    // Store the Google event ID back on the Planner record
     if (plannerEventId && created.id) {
-      await fetch(`${PB_URL}/api/collections/calendar_events/records/${plannerEventId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: adminToken },
-        body: JSON.stringify({ external_id: created.id, source: "google" }),
+      await pbAdmin(adminToken, `collections/calendar_events/records/${plannerEventId}`, "PATCH", {
+        external_id: created.id, source: "google",
       });
     }
 
@@ -49,7 +38,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Delete a Google Calendar event by its ID
 export async function DELETE(req: NextRequest) {
   try {
     const householdId = req.nextUrl.searchParams.get("householdId");
@@ -59,10 +47,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     const adminToken = await getPbAdminToken();
-    const rec = await getTokensForHousehold(adminToken, householdId);
-    if (!rec) return Response.json({ skipped: true });
+    const rec = await getGoogleTokenRecord(adminToken, householdId);
+    if (!rec?.calendar_id) return Response.json({ skipped: true });
 
-    const accessToken = await getAccessToken(rec.refresh_token);
+    const creds = await getGoogleCredentials(householdId);
+    const accessToken = await getAccessToken(rec.refresh_token, creds);
     await deleteGoogleEvent(accessToken, rec.calendar_id, googleEventId);
 
     return Response.json({ ok: true });

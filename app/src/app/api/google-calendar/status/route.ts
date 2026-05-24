@@ -1,27 +1,26 @@
 import { type NextRequest } from "next/server";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
+import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
 
 export async function GET(req: NextRequest) {
   const householdId = req.nextUrl.searchParams.get("householdId");
-  if (!householdId) return Response.json({ connected: false });
+  if (!householdId) return Response.json({ connected: false, hasCredentials: false });
 
   try {
     const token = await getPbAdminToken();
-    const res = await fetch(
-      `${PB_URL}/api/collections/google_tokens/records?filter=${encodeURIComponent(`household="${householdId}"`)}&perPage=1`,
-      { headers: { Authorization: token } },
-    );
-    if (!res.ok) return Response.json({ connected: false });
-    const data = await res.json();
-    if (!data.items?.length) return Response.json({ connected: false });
+    const rec = await getGoogleTokenRecord(token, householdId);
 
-    const rec = data.items[0];
+    const hasCredentials = await getGoogleCredentials(householdId).then(() => true).catch(() => false);
+
+    if (!rec?.refresh_token) return Response.json({ connected: false, hasCredentials });
+
     return Response.json({
       connected: true,
+      hasCredentials,
       calendarId: rec.calendar_id ?? "",
       hasSyncToken: !!rec.sync_token,
     });
   } catch {
-    return Response.json({ connected: false });
+    return Response.json({ connected: false, hasCredentials: false });
   }
 }

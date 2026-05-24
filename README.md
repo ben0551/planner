@@ -74,7 +74,16 @@ A family household management app built for real daily use. Covers chores, meals
 - Invite family members via a shareable link
 - Custody schedule setting (odd/even week) for split-custody households
 - **Dark mode** toggle — persists across sessions, flash-free (reads from localStorage before hydration)
+- **Themes** — choose from a range of colour themes including a dynamic time-of-day theme
 - Sync Database button to apply schema updates after app upgrades
+- **Data export/import** — download all household data as JSON; import into a self-hosted instance
+- **PWA / installable** — add to home screen on Android and iOS; supports web push notifications
+
+### Multi-household / instance admin
+- The instance admin (set via `ADMIN_EMAIL` env var) gets an Admin panel in the nav
+- Signup control: toggle new registrations on/off
+- Household approval queue: require approval before new households can access the app
+- Push notification broadcast: send a notification to all subscribed households
 
 ---
 
@@ -93,8 +102,6 @@ A family household management app built for real daily use. Covers chores, meals
 
 ### Option A — Docker (recommended for self-hosting)
 
-This runs both PocketBase and the Next.js app in containers.
-
 **1. Clone the repo**
 
 ```bash
@@ -108,16 +115,7 @@ cd planner
 cp .env.example .env
 ```
 
-Open `.env` and fill in your values:
-
-```env
-# The URL where PocketBase will be accessible — use your server's IP or domain for production
-NEXT_PUBLIC_POCKETBASE_URL=http://your-server-ip:8090
-
-# Your PocketBase superuser credentials — the account you create in the admin panel
-PB_ADMIN_EMAIL=admin@example.com
-PB_ADMIN_PASSWORD=your-admin-password
-```
+Open `.env` and fill in your values — see [Environment variables](#environment-variables) below.
 
 **3. Start the stack**
 
@@ -129,11 +127,9 @@ This starts:
 - `planner-pb` — PocketBase on port `8090`
 - `planner-app` — Next.js app on port `3000`
 
-The app waits for PocketBase to pass its health check before starting.
-
 **4. Create your PocketBase superuser account**
 
-Open `http://your-server-ip:8090/_/` in a browser and create an admin account. Use the **same email and password** you put in `.env` — these credentials let Planner perform server-side operations like PIN resets and kid login lookups.
+Open `http://your-server-ip:8090/_/` and create an admin account. Use the **same email and password** you put in `PB_ADMIN_EMAIL` / `PB_ADMIN_PASSWORD` — these credentials let Planner perform server-side operations.
 
 **5. Set up the database schema**
 
@@ -141,7 +137,7 @@ Open `http://your-server-ip:8090/_/` in a browser and create an admin account. U
 PB_EMAIL=admin@example.com PB_PASSWORD=your-admin-password node pb/setup.mjs
 ```
 
-This creates all the collections (chores, meals, shopping, etc.) in PocketBase. Run it once on a fresh install only.
+Run once on a fresh install. After that, use **Settings → Sync Database** for upgrades.
 
 **6. Register your account**
 
@@ -157,12 +153,6 @@ Open `http://your-server-ip:3000` and click "Create Account". The first user aut
 
 ```bash
 docker compose up pocketbase -d
-```
-
-Or run the PocketBase binary directly if you have it:
-
-```bash
-./pocketbase serve --dir=./pb/pb_data
 ```
 
 **2. Create the PocketBase admin account**
@@ -181,13 +171,7 @@ PB_EMAIL=admin@example.com PB_PASSWORD=your-admin-password node pb/setup.mjs
 cp .env.example app/.env.local
 ```
 
-Edit `app/.env.local`:
-
-```env
-NEXT_PUBLIC_POCKETBASE_URL=http://localhost:8090
-PB_ADMIN_EMAIL=admin@example.com
-PB_ADMIN_PASSWORD=your-admin-password
-```
+Edit `app/.env.local` with your local values.
 
 **5. Install dependencies and start the dev server**
 
@@ -201,54 +185,73 @@ Open `http://localhost:3000`.
 
 ---
 
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `PB_INTERNAL_URL` | Yes | URL Next.js uses server-side to reach PocketBase. Docker: `http://pocketbase:8090`. Local dev: `http://localhost:8090` |
+| `PB_ADMIN_EMAIL` | Yes | PocketBase superuser email (the account you created at `/_/`) |
+| `PB_ADMIN_PASSWORD` | Yes | PocketBase superuser password |
+| `ADMIN_EMAIL` | Recommended | Email of the Planner user who should have the admin panel (signup toggle, approval queue, push broadcasts). This is your regular app login email, **not** the PocketBase superuser email. Changing this takes effect on container restart — no rebuild needed. |
+| `APP_URL` | For Google Calendar | Public URL of this app, e.g. `https://planner.example.com`. Used as the Google OAuth redirect URI. |
+| `DOMAIN` | For Traefik | Your domain name, e.g. `planner.example.com` |
+| `GOOGLE_CLIENT_ID` | Optional | Global Google OAuth client ID — only used as a fallback when there is a single household on the instance. Multi-household deployments should enter credentials per-household in Settings. |
+| `GOOGLE_CLIENT_SECRET` | Optional | Global Google OAuth client secret (same fallback rule as above) |
+| `VAPID_PUBLIC_KEY` | For push notifications | VAPID public key. Generate with: `node -e "const wp=require('web-push');const k=wp.generateVAPIDKeys();console.log(k)"` |
+| `VAPID_PRIVATE_KEY` | For push notifications | VAPID private key (keep secret, server-side only) |
+| `VAPID_SUBJECT` | For push notifications | `mailto:` or `https:` URI, e.g. `mailto:you@example.com` |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | For push notifications | Same value as `VAPID_PUBLIC_KEY` — must be set separately so the browser can subscribe |
+
+> **Note:** `NEXT_PUBLIC_*` variables are embedded in the client bundle at build time. All other variables are read at runtime from the running container — no rebuild needed when you change them.
+
+For local development, put these in `app/.env.local`.  
+For Docker, put them in `.env` at the repo root.
+
+### Google Calendar setup (per household)
+
+Each household owner sets up their own Google OAuth credentials directly in **Settings → Google Calendar**:
+
+1. Go to [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Create an **OAuth 2.0 Client ID** (type: Web application)
+3. Add an authorised redirect URI: `https://your-domain/api/google-calendar/callback`
+4. Copy the Client ID and Client Secret into Settings → Google Calendar → credentials form
+5. Click **Connect Google Calendar** and authorise
+
+This keeps credentials isolated per household. The global `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` env vars act as a fallback only when there is exactly one household on the instance.
+
+### Push notifications setup
+
+Push notifications require HTTPS (works on your public domain; `localhost` also works as a browser exception).
+
+1. Generate VAPID keys:
+   ```bash
+   node -e "const wp=require('web-push'); const k=wp.generateVAPIDKeys(); console.log(k);"
+   ```
+2. Add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` to your `.env`
+3. Deploy and go to **Settings → Sync Database** to create the `push_subscriptions` collection
+4. Users will be prompted to allow notifications on their next login
+
+---
+
 ## How to use Planner
 
 ### First-time setup (owner)
 
 1. Register at `/register` — this creates your household and makes you the owner
-2. Go to **Settings** to set your household name and custody schedule (if relevant)
+2. Go to **Settings** to configure your household
 3. Go to **Settings → Members** to add family members:
-   - **Invite adults**: copy the invite link and send it — they register and join your household automatically
-   - **Add child account**: enter the child's name, set a 4-digit PIN, and configure their permissions
-
-### Daily use — adults
-
-- **Today's chores**: the Chores tab shows this week. Tap a chore to mark it done. Tap again to undo.
-- **Admin panel**: tap the shield icon in the Chores header to open the admin view. See each kid's chores for any day and toggle them directly.
-- **Meals**: tap any meal slot in the weekly planner to add a meal. Use the Recipe Library to save meals for quick access.
-- **Shopping**: add items as you think of them. Tick them off while shopping.
-- **Rewards**: watch the leaderboard update as kids complete chores. Set goals with rewards to motivate them.
+   - **Invite adults**: copy the invite link — they register and join automatically
+   - **Add child account**: enter the child's name, set a 4-digit PIN, and configure permissions
 
 ### Kid login
 
-Kids don't need an email or password. On the login screen:
-
-1. Tap **"I'm a kid — find my family"**
-2. Select your household (usually only one option)
+1. Tap **"I'm a kid — find my family"** on the login screen
+2. Select your household
 3. Enter your 4-digit PIN
 
 ### Keeping the schema up to date
 
-After pulling a new version of Planner, go to **Settings → Sync Database**. This applies any schema changes to your PocketBase instance. It's safe to run multiple times — it only adds what's missing.
-
----
-
-## Environment variables
-
-| Variable | Where it's used | Description |
-|---|---|---|
-| `NEXT_PUBLIC_POCKETBASE_URL` | Browser + server | Full URL to your PocketBase instance |
-| `PB_ADMIN_EMAIL` | Server-side only | PocketBase superuser email |
-| `PB_ADMIN_PASSWORD` | Server-side only | PocketBase superuser password |
-| `GOOGLE_CLIENT_ID` | Server-side only | Google OAuth client ID (Calendar sync) |
-| `GOOGLE_CLIENT_SECRET` | Server-side only | Google OAuth client secret (Calendar sync) |
-| `APP_URL` | Server-side only | Public app URL — used as the Google OAuth redirect URI |
-| `DOMAIN` | Docker / Traefik | Your domain name, e.g. `planner.example.com` |
-
-`PB_ADMIN_EMAIL` and `PB_ADMIN_PASSWORD` are only used by server-side API routes (PIN reset, kid login lookup, schema migration). They are never sent to the browser.
-
-For local development, put these in `app/.env.local`.  
-For Docker, put them in `.env` at the repo root.
+After pulling a new version, go to **Settings → Sync Database**. Safe to run multiple times — only adds what's missing.
 
 ---
 
@@ -260,32 +263,43 @@ planner/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── (auth)/           # Login and registration pages
-│   │   │   │   ├── login/        # Email login + kid PIN login
-│   │   │   │   └── register/     # New account + household creation
 │   │   │   ├── (dashboard)/      # Main app (requires auth)
-│   │   │   │   ├── chores/       # Chore management + admin panel
-│   │   │   │   ├── meals/        # Weekly meal planner + recipe library
-│   │   │   │   ├── shopping/     # Shared shopping list
-│   │   │   │   ├── calendar/     # Family calendar
-│   │   │   │   ├── rewards/      # Leaderboard + goals
-│   │   │   │   └── settings/     # Household settings + member management
-│   │   │   └── api/              # Server-side API routes
-│   │   │       ├── _pb-admin.ts  # Shared PocketBase admin auth helper
-│   │   │       ├── migrate/      # Schema migration endpoint
-│   │   │       ├── reset-pin/    # PIN reset endpoint
-│   │   │       └── household-lookup/ # Kid login family lookup
-│   │   ├── components/ui/        # shadcn/ui components
-│   │   ├── context/
-│   │   │   └── auth.tsx          # useAuth() — user, membership, householdId
+│   │   │   │   ├── admin/        # Instance admin panel
+│   │   │   │   ├── chores/
+│   │   │   │   ├── meals/
+│   │   │   │   ├── shopping/
+│   │   │   │   ├── calendar/
+│   │   │   │   ├── rewards/
+│   │   │   │   ├── tasks/
+│   │   │   │   ├── notes/
+│   │   │   │   └── settings/
+│   │   │   └── api/
+│   │   │       ├── _pb-admin.ts          # PocketBase admin auth helper
+│   │   │       ├── admin/                # Signup settings, household approvals
+│   │   │       ├── google-calendar/      # OAuth flow + sync routes
+│   │   │       ├── push/                 # Web push subscribe + send
+│   │   │       ├── migrate/              # Schema migration endpoint
+│   │   │       └── household-lookup/     # Kid login family lookup
+│   │   ├── components/
+│   │   │   ├── ui/               # shadcn/ui components
+│   │   │   ├── nav.tsx           # Sidebar + mobile nav
+│   │   │   └── pwa.tsx           # Service worker registration + push subscribe
+│   │   ├── context/auth.tsx      # useAuth() hook
 │   │   └── lib/
-│   │       ├── pocketbase.ts     # PocketBase client + all TypeScript types
+│   │       ├── pocketbase.ts     # PocketBase client + TypeScript types
+│   │       ├── google-calendar.ts # Google Calendar API helpers
+│   │       ├── themes.ts         # Theme definitions + dynamic theme
 │   │       └── utils.ts
+│   ├── public/
+│   │   ├── manifest.webmanifest  # PWA manifest
+│   │   ├── icon.svg              # App icon
+│   │   └── sw.js                 # Service worker
 │   ├── Dockerfile
 │   └── package.json
 ├── pb/
-│   ├── setup.mjs                 # One-time database schema creation script
-│   └── pb_data/                  # PocketBase data directory (gitignored)
-├── .github/                      # GitHub Actions (Docker image build + publish)
+│   ├── setup.mjs                 # One-time schema creation
+│   └── pb_data/                  # PocketBase data (gitignored)
+├── .github/                      # GitHub Actions CI
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -295,17 +309,10 @@ planner/
 
 ## Docker image
 
-On every push to `main`, GitHub Actions builds and publishes the app image to:
+On every push to `main`, GitHub Actions builds and publishes to:
 
 ```
 ghcr.io/ben0551/planner/planner-app:latest
-```
-
-To build locally:
-
-```bash
-cd app
-docker build -t planner-app .
 ```
 
 ---
@@ -322,5 +329,3 @@ docker build -t planner-app .
 | Odd weeks | Weeks with an odd ISO week number |
 | Even weeks | Weeks with an even ISO week number |
 | My week | Based on the custody schedule — alternates between parents |
-
-Odd/even weeks use ISO week numbers (absolute, no drift). "My week" uses the household's `custody_week` setting (odd or even) to determine which parent is "on".

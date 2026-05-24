@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { exchangeCode } from "@/lib/google-calendar";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
+import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -24,29 +25,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { refresh_token } = await exchangeCode(code);
-
     const adminToken = await getPbAdminToken();
+    const creds = await getGoogleCredentials(householdId);
+    const { refresh_token } = await exchangeCode(code, creds);
 
-    // Upsert the google_tokens record for this household
-    const existing = await pbAdmin(
-      adminToken,
-      `collections/google_tokens/records?filter=${encodeURIComponent(`household="${householdId}"`)}&perPage=1`,
-    );
-
-    if (existing?.items?.length > 0) {
-      await pbAdmin(
-        adminToken,
-        `collections/google_tokens/records/${existing.items[0].id}`,
-        "PATCH",
-        { refresh_token, calendar_id: "", sync_token: "" },
-      );
+    const existing = await getGoogleTokenRecord(adminToken, householdId);
+    if (existing) {
+      await pbAdmin(adminToken, `collections/google_tokens/records/${existing.id}`, "PATCH", {
+        refresh_token, calendar_id: "", sync_token: "",
+      });
     } else {
       await pbAdmin(adminToken, "collections/google_tokens/records", "POST", {
-        household: householdId,
-        refresh_token,
-        calendar_id: "",
-        sync_token: "",
+        household: householdId, refresh_token, calendar_id: "", sync_token: "",
       });
     }
 

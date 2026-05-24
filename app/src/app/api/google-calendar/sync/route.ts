@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
 import { getAccessToken, listEvents, fromGoogleEvent } from "@/lib/google-calendar";
+import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
 
 async function pbAdmin(token: string, path: string, method = "GET", body?: object) {
   const res = await fetch(`${PB_URL}/api/${path}`, {
@@ -18,30 +19,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const adminToken = await getPbAdminToken();
-
-    // Get stored tokens
-    const tokensRes = await pbAdmin(
-      adminToken,
-      `collections/google_tokens/records?filter=${encodeURIComponent(`household="${householdId}"`)}&perPage=1`,
-    );
-    if (!tokensRes?.items?.length) return Response.json({ skipped: true });
-
-    const rec = tokensRes.items[0];
+    const rec = await getGoogleTokenRecord(adminToken, householdId);
+    if (!rec) return Response.json({ skipped: true });
     if (!rec.calendar_id) return Response.json({ skipped: true, reason: "no calendar selected" });
 
-    const accessToken = await getAccessToken(rec.refresh_token);
-    const { items, nextSyncToken } = await listEvents(
-      accessToken,
-      rec.calendar_id,
-      rec.sync_token || undefined,
-    );
+    const creds = await getGoogleCredentials(householdId);
+    const accessToken = await getAccessToken(rec.refresh_token, creds);
+    const { items, nextSyncToken } = await listEvents(accessToken, rec.calendar_id, rec.sync_token || undefined);
 
     let created = 0, updated = 0, deleted = 0;
 
     for (const gEvent of items) {
       if (!gEvent.id) continue;
-
-      // Find existing Planner record by external_id
       const existing = await pbAdmin(
         adminToken,
         `collections/calendar_events/records?filter=${encodeURIComponent(`household="${householdId}" && external_id="${gEvent.id}"`)}&perPage=1`,
@@ -50,25 +39,15 @@ export async function GET(req: NextRequest) {
 
       if (gEvent.status === "cancelled") {
         if (existingRec) {
-          await pbAdmin(
-            adminToken,
-            `collections/calendar_events/records/${existingRec.id}`,
-            "DELETE",
-          );
+          await pbAdmin(adminToken, `collections/calendar_events/records/${existingRec.id}`, "DELETE");
           deleted++;
         }
         continue;
       }
 
       const fields = fromGoogleEvent(gEvent, householdId);
-
       if (existingRec) {
-        await pbAdmin(
-          adminToken,
-          `collections/calendar_events/records/${existingRec.id}`,
-          "PATCH",
-          fields,
-        );
+        await pbAdmin(adminToken, `collections/calendar_events/records/${existingRec.id}`, "PATCH", fields);
         updated++;
       } else {
         await pbAdmin(adminToken, "collections/calendar_events/records", "POST", fields);
@@ -76,11 +55,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Save the new sync token
     if (nextSyncToken) {
-      await pbAdmin(adminToken, `collections/google_tokens/records/${rec.id}`, "PATCH", {
-        sync_token: nextSyncToken,
-      });
+      await pbAdmin(adminToken, `collections/google_tokens/records/${rec.id}`, "PATCH", { sync_token: nextSyncToken });
     }
 
     return Response.json({ ok: true, created, updated, deleted });

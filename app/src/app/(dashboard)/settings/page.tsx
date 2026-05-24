@@ -98,12 +98,18 @@ function SettingsContent() {
   // Google Calendar
   const [gcalStatus, setGcalStatus] = useState<{
     connected: boolean;
+    hasCredentials?: boolean;
     calendarId?: string;
   } | null>(null);
   const [gcalCalendars, setGcalCalendars] = useState<{ id: string; summary: string; primary?: boolean }[]>([]);
   const [gcalPickerOpen, setGcalPickerOpen] = useState(false);
   const [gcalSaving, setGcalSaving] = useState(false);
   const [gcalMsg, setGcalMsg] = useState("");
+  const [gcalClientId, setGcalClientId] = useState("");
+  const [gcalClientSecret, setGcalClientSecret] = useState("");
+  const [gcalCredsSaving, setGcalCredsSaving] = useState(false);
+  const [gcalCredsMsg, setGcalCredsMsg] = useState("");
+  const [gcalShowCreds, setGcalShowCreds] = useState(false);
 
   useEffect(() => {
     if (!householdId || !isOwner) return;
@@ -146,8 +152,31 @@ function SettingsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ householdId }),
     });
-    setGcalStatus({ connected: false });
+    setGcalStatus((s) => ({ ...s, connected: false }));
     setGcalMsg("Disconnected.");
+  }
+
+  async function saveGcalCredentials() {
+    if (!gcalClientId.trim() || !gcalClientSecret.trim()) return;
+    setGcalCredsSaving(true);
+    setGcalCredsMsg("");
+    try {
+      const res = await fetch("/api/google-calendar/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ householdId, clientId: gcalClientId, clientSecret: gcalClientSecret }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setGcalStatus((s) => ({ ...s, connected: s?.connected ?? false, hasCredentials: true }));
+      setGcalCredsMsg("Credentials saved.");
+      setGcalShowCreds(false);
+      setGcalClientId("");
+      setGcalClientSecret("");
+    } catch (e: any) {
+      setGcalCredsMsg(e.message ?? "Save failed.");
+    } finally {
+      setGcalCredsSaving(false);
+    }
   }
 
   async function exportData() {
@@ -503,65 +532,113 @@ function SettingsContent() {
             {gcalMsg && <p className="text-xs text-primary">{gcalMsg}</p>}
             {gcalStatus === null ? (
               <p className="text-xs text-muted-foreground">Checking…</p>
-            ) : !gcalStatus.connected ? (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Connect your Google account to sync Planner events with Google Calendar.
-                </p>
-                <Button
-                  size="sm"
-                  className="self-start rounded-xl"
-                  onClick={() => window.location.href = `/api/google-calendar/auth?householdId=${householdId}`}
-                >
-                  Connect Google Calendar
-                </Button>
-              </>
             ) : (
               <>
-                {gcalStatus.calendarId ? (
-                  <p className="text-xs text-muted-foreground">
-                    Syncing with calendar ID: <strong className="font-mono">{gcalStatus.calendarId}</strong>
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Connected — choose a calendar to sync.</p>
+                {/* Credentials setup */}
+                {(!gcalStatus.hasCredentials || gcalShowCreds) && (
+                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+                    <p className="text-xs font-semibold">Google API credentials</p>
+                    <p className="text-xs text-muted-foreground">
+                      Create an OAuth 2.0 Client ID in{" "}
+                      <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" className="underline">
+                        Google Cloud Console
+                      </a>{" "}
+                      (type: Web application). Set the authorised redirect URI to:
+                    </p>
+                    <code className="text-xs bg-muted px-2 py-1 rounded break-all">
+                      {typeof window !== "undefined" ? window.location.origin : ""}/api/google-calendar/callback
+                    </code>
+                    {gcalCredsMsg && <p className="text-xs text-primary">{gcalCredsMsg}</p>}
+                    <Input
+                      placeholder="Client ID"
+                      value={gcalClientId}
+                      onChange={(e) => setGcalClientId(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      placeholder="Client Secret"
+                      type="password"
+                      value={gcalClientSecret}
+                      onChange={(e) => setGcalClientSecret(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" className="rounded-xl" disabled={gcalCredsSaving || !gcalClientId || !gcalClientSecret} onClick={saveGcalCredentials}>
+                        {gcalCredsSaving ? "Saving…" : "Save credentials"}
+                      </Button>
+                      {gcalShowCreds && (
+                        <Button size="sm" variant="ghost" className="rounded-xl" onClick={() => setGcalShowCreds(false)}>Cancel</Button>
+                      )}
+                    </div>
+                  </div>
                 )}
-                {!gcalPickerOpen ? (
-                  <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" variant="outline" className="rounded-xl" onClick={openCalendarPicker}>
-                      {gcalStatus.calendarId ? "Change calendar" : "Select calendar"}
-                    </Button>
-                    <Button size="sm" variant="ghost" className="rounded-xl text-destructive hover:text-destructive" onClick={disconnectGcal}>
-                      Disconnect
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {gcalCalendars.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Loading calendars…</p>
+
+                {/* Connect / calendar picker */}
+                {gcalStatus.hasCredentials && !gcalStatus.connected && (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Connect your Google account to sync Planner events with Google Calendar.
+                    </p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button size="sm" className="self-start rounded-xl" onClick={() => window.location.href = `/api/google-calendar/auth?householdId=${householdId}`}>
+                        Connect Google Calendar
+                      </Button>
+                      <Button size="sm" variant="ghost" className="rounded-xl text-muted-foreground" onClick={() => setGcalShowCreds(true)}>
+                        Update credentials
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {gcalStatus.connected && (
+                  <>
+                    {gcalStatus.calendarId ? (
+                      <p className="text-xs text-muted-foreground">
+                        Syncing with calendar: <strong className="font-mono">{gcalStatus.calendarId}</strong>
+                      </p>
                     ) : (
-                      gcalCalendars.map((cal) => (
-                        <button
-                          key={cal.id}
-                          onClick={() => selectCalendar(cal.id)}
-                          disabled={gcalSaving}
-                          className={cn(
-                            "flex items-center gap-3 rounded-xl border p-3 text-left cursor-pointer transition-colors",
-                            gcalStatus.calendarId === cal.id
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:bg-muted/30"
-                          )}
-                        >
-                          <div>
-                            <p className="text-sm font-medium">{cal.summary}</p>
-                            {cal.primary && <p className="text-xs text-muted-foreground">Primary</p>}
-                          </div>
-                        </button>
-                      ))
+                      <p className="text-xs text-muted-foreground">Connected — choose a calendar to sync.</p>
                     )}
-                    <button onClick={() => setGcalPickerOpen(false)} className="text-xs text-muted-foreground hover:underline self-start">
-                      Cancel
-                    </button>
-                  </div>
+                    {!gcalPickerOpen ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" variant="outline" className="rounded-xl" onClick={openCalendarPicker}>
+                          {gcalStatus.calendarId ? "Change calendar" : "Select calendar"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="rounded-xl text-muted-foreground" onClick={() => setGcalShowCreds(true)}>
+                          Update credentials
+                        </Button>
+                        <Button size="sm" variant="ghost" className="rounded-xl text-destructive hover:text-destructive" onClick={disconnectGcal}>
+                          Disconnect
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {gcalCalendars.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Loading calendars…</p>
+                        ) : (
+                          gcalCalendars.map((cal) => (
+                            <button
+                              key={cal.id}
+                              onClick={() => selectCalendar(cal.id)}
+                              disabled={gcalSaving}
+                              className={cn(
+                                "flex items-center gap-3 rounded-xl border p-3 text-left cursor-pointer transition-colors",
+                                gcalStatus.calendarId === cal.id
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:bg-muted/30"
+                              )}
+                            >
+                              <p className="text-sm font-medium">{cal.summary}</p>
+                              {cal.primary && <p className="text-xs text-muted-foreground">Primary</p>}
+                            </button>
+                          ))
+                        )}
+                        <button onClick={() => setGcalPickerOpen(false)} className="text-xs text-muted-foreground hover:underline self-start">
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}

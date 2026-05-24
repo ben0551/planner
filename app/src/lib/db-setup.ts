@@ -277,7 +277,7 @@ export async function ensureSchema(): Promise<string[]> {
     ],
   });
 
-  // google_tokens: admin-only (no rules set), stores OAuth refresh tokens per household
+  // google_tokens: admin-only (no rules set), stores OAuth tokens + credentials per household
   await ensureCollection({
     name: "google_tokens",
     fields: [
@@ -285,6 +285,8 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "refresh_token", type: "text" },
       { name: "calendar_id", type: "text" },
       { name: "sync_token", type: "text" },
+      { name: "google_client_id", type: "text" },
+      { name: "google_client_secret", type: "text" },
     ],
   });
 
@@ -363,6 +365,10 @@ export async function ensureSchema(): Promise<string[]> {
   await addMissingFields("calendar_events", [
     { name: "recurrence", ...sel(["none", "daily", "weekly", "fortnightly", "monthly", "yearly"]) },
     { name: "recurrence_until", type: "text" },
+  ]);
+  await addMissingFields("google_tokens", [
+    { name: "google_client_id", type: "text" },
+    { name: "google_client_secret", type: "text" },
   ]);
 
   // chores recurrence — add new option values if missing

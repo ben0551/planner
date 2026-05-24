@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
 import { getAccessToken, listCalendars } from "@/lib/google-calendar";
+import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
 
 export async function GET(req: NextRequest) {
   const householdId = req.nextUrl.searchParams.get("householdId");
@@ -8,15 +9,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const adminToken = await getPbAdminToken();
-    const res = await fetch(
-      `${PB_URL}/api/collections/google_tokens/records?filter=${encodeURIComponent(`household="${householdId}"`)}&perPage=1`,
-      { headers: { Authorization: adminToken } },
-    );
-    const data = await res.json();
-    if (!data.items?.length) return Response.json({ error: "Not connected" }, { status: 400 });
+    const rec = await getGoogleTokenRecord(adminToken, householdId);
+    if (!rec?.refresh_token) return Response.json({ error: "Not connected" }, { status: 400 });
 
-    const { refresh_token } = data.items[0];
-    const accessToken = await getAccessToken(refresh_token);
+    const creds = await getGoogleCredentials(householdId);
+    const accessToken = await getAccessToken(rec.refresh_token, creds);
     const calendars = await listCalendars(accessToken);
 
     return Response.json({ calendars });
