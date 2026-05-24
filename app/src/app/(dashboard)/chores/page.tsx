@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth, usePermission } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion } from "@/lib/pocketbase";
 import { logActivity } from "@/lib/activity";
+import { celebrate } from "@/lib/celebrate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,6 +200,7 @@ export default function ChoresPage() {
   const custodyWeek = membership?.expand?.household?.custody_week as "odd" | "even" | "" | undefined;
   const pb = getClient();
   const isOwner = membership?.role === "owner";
+  const isKid = !!(membership as any)?.pin && !isOwner;
   const chorePerm = usePermission("chores");
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -261,6 +263,7 @@ export default function ChoresPage() {
         chore: chore.id, user: kidId, date: dateStr, points: chore.points ?? 0,
       });
       setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+      celebrate(chore.points ?? 0);
       logActivity(householdId!, kidId, `✅ ${chore.title} completed`, "chore", chore.id);
     }
   }
@@ -285,6 +288,7 @@ export default function ChoresPage() {
         chore: chore.id, user: user.id, date: dateStr, points: late ? 0 : (chore.points ?? 0),
       });
       setCompletions(prev => [...prev, created as unknown as ChoreCompletion]);
+      celebrate(late ? 0 : (chore.points ?? 0));
       logActivity(householdId!, user.id, `✅ ${chore.title} completed`, "chore", chore.id);
     }
   }
@@ -422,6 +426,118 @@ export default function ChoresPage() {
         )}
         {done && (
           <span className="text-[9px] text-emerald-600 font-bold">tap to undo</span>
+        )}
+      </div>
+    );
+  }
+
+  if (isKid) {
+    const todayChores = activeChores.filter(c =>
+      isDueOnDate(c, todayStr, custodyWeek, startOnSun)
+    );
+    const doneToday = todayChores.filter(c => isCompletedOnDate(c, todayStr));
+    const todoToday = todayChores.filter(c => !isCompletedOnDate(c, todayStr));
+    const todayPts = completions
+      .filter(c => dateMatchesDay(c.date, todayStr))
+      .reduce((s, c) => s + (c.points ?? 0), 0);
+    const allDone = todayChores.length > 0 && todoToday.length === 0;
+    const pct = todayChores.length === 0 ? 0 : Math.round((doneToday.length / todayChores.length) * 100);
+
+    return (
+      <div className="flex flex-col gap-4 max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-black">My Chores</h1>
+          {todayPts > 0 && (
+            <span className="flex items-center gap-1 text-sm font-black text-amber-600">
+              <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
+              {todayPts} pts today
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {todayChores.length > 0 && (
+          <div>
+            <div className="flex justify-between text-xs text-muted-foreground font-medium mb-1">
+              <span>{doneToday.length}/{todayChores.length} done</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="h-3 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* All-done celebration */}
+        {allDone && (
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-400 to-green-500 p-5 text-white text-center shadow-lg">
+            <p className="text-4xl mb-1">🎉</p>
+            <p className="text-lg font-black">All done!</p>
+            <p className="text-sm opacity-90">Amazing work today!</p>
+          </div>
+        )}
+
+        {/* Todo chores */}
+        {todoToday.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            {todoToday.map(chore => (
+              <button
+                key={chore.id}
+                onClick={() => toggleOnDate(chore, todayStr)}
+                className={cn(
+                  "rounded-2xl border flex flex-col items-center text-center p-4 gap-2 active:scale-95 transition-all shadow-sm",
+                  choreColor(chore.id)
+                )}
+              >
+                <span className="text-5xl leading-none">{choreEmoji(chore.title)}</span>
+                <p className="text-sm font-black leading-tight">{chore.title}</p>
+                {(chore.points ?? 0) > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs text-amber-600 font-black">
+                    <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
+                    {chore.points} pts
+                  </span>
+                )}
+                {chore.deadline_time && (
+                  <span className="text-[10px] text-rose-600 font-bold">⏰ by {formatDeadline(chore.deadline_time)}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {todayChores.length === 0 && (
+          <div className="rounded-2xl bg-card border border-border p-8 text-center">
+            <p className="text-4xl mb-2">🌟</p>
+            <p className="font-bold">No chores today!</p>
+            <p className="text-sm text-muted-foreground">Enjoy your free time.</p>
+          </div>
+        )}
+
+        {/* Done chores */}
+        {doneToday.length > 0 && (
+          <div className="rounded-2xl bg-card border border-border overflow-hidden">
+            <div className="px-4 py-2.5 border-b">
+              <h2 className="text-sm font-bold text-emerald-600">Completed ✓</h2>
+            </div>
+            <div className="flex flex-col divide-y">
+              {doneToday.map(chore => (
+                <button
+                  key={chore.id}
+                  onClick={() => toggleOnDate(chore, todayStr)}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors text-left w-full"
+                >
+                  <span className="text-xl">✅</span>
+                  <span className="flex-1 text-sm font-medium line-through text-muted-foreground">{chore.title}</span>
+                  <span className="text-xs text-muted-foreground">undo</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     );

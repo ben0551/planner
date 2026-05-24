@@ -5,6 +5,7 @@ import { useAuth } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note } from "@/lib/pocketbase";
 import Link from "next/link";
 import { CheckCircle2, Star, Wallet, ChevronUp, ChevronDown, Settings2 } from "lucide-react";
+import { getLevel } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
 const CHORE_EMOJI: Record<string, string> = {
@@ -562,11 +563,11 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex gap-3 shrink-0">
-          <div className="flex flex-col items-center gap-0.5">
-            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
-            <span className="text-sm font-black">{totalPoints}</span>
-            <span className="text-[10px] text-muted-foreground">total pts</span>
-          </div>
+          <Link href="/progress" className="flex flex-col items-center gap-0.5 hover:opacity-80 transition-opacity">
+            <span className="text-xl leading-none">{getLevel(totalPoints).emoji}</span>
+            <span className="text-[11px] font-black">{getLevel(totalPoints).name}</span>
+            <span className="text-[10px] text-muted-foreground">{totalPoints} pts</span>
+          </Link>
           {(membership as any)?.pin && typeof (membership as any)?.balance === "number" && (
             <div className="flex flex-col items-center gap-0.5">
               <Wallet className="h-4 w-4 text-emerald-600" />

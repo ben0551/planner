@@ -72,6 +72,38 @@ export const THEMES: Theme[] = [
     primary: "oklch(0.30 0.18 280)",
     primaryFg: "oklch(1 0 0)",
   },
+  {
+    name: "space",
+    label: "Space",
+    emoji: "🚀",
+    gradient: "linear-gradient(175deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+    primary: "oklch(0.55 0.22 270)",
+    primaryFg: "oklch(1 0 0)",
+  },
+  {
+    name: "dino",
+    label: "Dino",
+    emoji: "🦕",
+    gradient: "linear-gradient(175deg, #16a34a 0%, #4ade80 100%)",
+    primary: "oklch(0.60 0.22 145)",
+    primaryFg: "oklch(1 0 0)",
+  },
+  {
+    name: "gaming",
+    label: "Gaming",
+    emoji: "🎮",
+    gradient: "linear-gradient(175deg, #14532d 0%, #166534 100%)",
+    primary: "oklch(0.55 0.20 145)",
+    primaryFg: "oklch(1 0 0)",
+  },
+  {
+    name: "candy",
+    label: "Candy",
+    emoji: "🍭",
+    gradient: "linear-gradient(175deg, #db2777 0%, #7c3aed 100%)",
+    primary: "oklch(0.55 0.26 330)",
+    primaryFg: "oklch(1 0 0)",
+  },
 ];
 
 export const DEFAULT_THEME = THEMES[0];
