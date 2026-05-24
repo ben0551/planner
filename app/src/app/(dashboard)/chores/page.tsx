@@ -435,10 +435,14 @@ export default function ChoresPage() {
     const todayChores = activeChores.filter(c =>
       isDueOnDate(c, todayStr, custodyWeek, startOnSun)
     );
+    // For "everyone" chores each person must complete their own; for single/shared, anyone's completion counts.
     const kidDoneOnDate = (chore: Chore) =>
       completions.some(c => c.chore === chore.id && c.user === user?.id && dateMatchesDay(c.date, todayStr));
-    const doneToday = todayChores.filter(c => kidDoneOnDate(c));
-    const todoToday = todayChores.filter(c => !kidDoneOnDate(c));
+    const choreEffectivelyDone = (chore: Chore) =>
+      chore.type === "everyone" ? kidDoneOnDate(chore) : isCompletedOnDate(chore, todayStr);
+    const doneByKid = todayChores.filter(c => kidDoneOnDate(c));
+    const doneToday = todayChores.filter(c => choreEffectivelyDone(c));
+    const todoToday = todayChores.filter(c => !choreEffectivelyDone(c));
     const todayPts = completions
       .filter(c => c.user === user?.id && dateMatchesDay(c.date, todayStr))
       .reduce((s, c) => s + (c.points ?? 0), 0);
@@ -520,14 +524,14 @@ export default function ChoresPage() {
           </div>
         )}
 
-        {/* Done chores */}
-        {doneToday.length > 0 && (
+        {/* Done chores — only ones the kid completed themselves (so undo makes sense) */}
+        {doneByKid.length > 0 && (
           <div className="rounded-2xl bg-card border border-border overflow-hidden">
             <div className="px-4 py-2.5 border-b">
               <h2 className="text-sm font-bold text-emerald-600">Completed ✓</h2>
             </div>
             <div className="flex flex-col divide-y">
-              {doneToday.map(chore => (
+              {doneByKid.map(chore => (
                 <button
                   key={chore.id}
                   onClick={() => toggleOnDate(chore, todayStr)}

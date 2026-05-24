@@ -149,6 +149,7 @@ export interface Goal {
   user: string;
   users?: string[];  // shared goal: array of 2 user IDs; combined points count toward target
   title: string;
+  emoji?: string;
   target_points: number;
   reward_description?: string;
   achieved: boolean;
