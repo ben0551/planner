@@ -435,10 +435,12 @@ export default function ChoresPage() {
     const todayChores = activeChores.filter(c =>
       isDueOnDate(c, todayStr, custodyWeek, startOnSun)
     );
-    const doneToday = todayChores.filter(c => isCompletedOnDate(c, todayStr));
-    const todoToday = todayChores.filter(c => !isCompletedOnDate(c, todayStr));
+    const kidDoneOnDate = (chore: Chore) =>
+      completions.some(c => c.chore === chore.id && c.user === user?.id && dateMatchesDay(c.date, todayStr));
+    const doneToday = todayChores.filter(c => kidDoneOnDate(c));
+    const todoToday = todayChores.filter(c => !kidDoneOnDate(c));
     const todayPts = completions
-      .filter(c => dateMatchesDay(c.date, todayStr))
+      .filter(c => c.user === user?.id && dateMatchesDay(c.date, todayStr))
       .reduce((s, c) => s + (c.points ?? 0), 0);
     const allDone = todayChores.length > 0 && todoToday.length === 0;
     const pct = todayChores.length === 0 ? 0 : Math.round((doneToday.length / todayChores.length) * 100);
