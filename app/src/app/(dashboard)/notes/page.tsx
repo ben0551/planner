@@ -29,6 +29,9 @@ export default function NotesPage() {
   const [content, setContent] = useState("");
   const [selectedColor, setSelectedColor] = useState(NOTE_COLORS[0].bg);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editColor, setEditColor] = useState(NOTE_COLORS[0].bg);
 
   useEffect(() => {
     if (!householdId) return;
@@ -66,6 +69,21 @@ export default function NotesPage() {
   async function deleteNote(id: string) {
     await pb.collection("notes").delete(id);
     setNotes((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  function startEdit(note: Note) {
+    setEditingId(note.id);
+    setEditContent(note.content ?? "");
+    setEditColor(note.color ?? NOTE_COLORS[0].bg);
+  }
+
+  async function saveEdit(id: string) {
+    if (!editContent.trim()) return;
+    await pb.collection("notes").update(id, { content: editContent.trim(), color: editColor });
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, content: editContent.trim(), color: editColor } : n)),
+    );
+    setEditingId(null);
   }
 
   async function togglePin(note: Note) {
@@ -125,13 +143,46 @@ export default function NotesPage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {notes.map((note) => {
-            const { bg, border } = colorFor(note.color);
+            const isEditing = editingId === note.id;
+            const { bg, border } = colorFor(isEditing ? editColor : note.color);
             return (
               <div
                 key={note.id}
                 className={cn("relative rounded-2xl border p-3 flex flex-col gap-2 group", bg, border)}
               >
-                <p className="text-sm whitespace-pre-wrap break-words flex-1">{note.content}</p>
+                {isEditing ? (
+                  <>
+                    <textarea
+                      autoFocus
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      onBlur={() => saveEdit(note.id)}
+                      onKeyDown={(e) => { if (e.key === "Escape") setEditingId(null); }}
+                      rows={4}
+                      className="w-full resize-none rounded-lg bg-transparent text-sm px-1 py-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <div className="flex gap-1">
+                      {NOTE_COLORS.map((c) => (
+                        <button
+                          key={c.bg}
+                          onMouseDown={(e) => { e.preventDefault(); setEditColor(c.bg); }}
+                          className={cn(
+                            "h-5 w-5 rounded-full border-2 transition-transform",
+                            c.bg,
+                            editColor === c.bg ? "border-foreground scale-110" : "border-transparent",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p
+                    className="text-sm whitespace-pre-wrap break-words flex-1 cursor-text"
+                    onClick={() => startEdit(note)}
+                  >
+                    {note.content}
+                  </p>
+                )}
                 <div className="flex items-center justify-between">
                   <button
                     onClick={() => togglePin(note)}

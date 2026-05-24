@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
 import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note } from "@/lib/pocketbase";
 import Link from "next/link";
-import { CheckCircle2, Star, Wallet } from "lucide-react";
+import { CheckCircle2, Star, Wallet, ChevronUp, ChevronDown, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CHORE_EMOJI: Record<string, string> = {
@@ -110,7 +110,6 @@ function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even"
   return chore.due_date ? chore.due_date.startsWith(dateStr) : false;
 }
 
-
 function computeStreak(completions: ChoreCompletion[], uid: string): number {
   const dates = new Set(completions.filter(c => c.user === uid).map(c => c.date.slice(0, 10)));
   let s = 0;
@@ -141,7 +140,6 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
   );
 }
 
-
 const NOTE_BG: Record<string, string> = {
   "bg-yellow-100":  "bg-yellow-100 border-yellow-200",
   "bg-pink-100":    "bg-pink-100 border-pink-200",
@@ -150,6 +148,9 @@ const NOTE_BG: Record<string, string> = {
   "bg-violet-100":  "bg-violet-100 border-violet-200",
   "bg-orange-100":  "bg-orange-100 border-orange-200",
 };
+
+type WidgetId = "streaks" | "upcoming" | "chores" | "notes";
+const DEFAULT_WIDGET_ORDER: WidgetId[] = ["streaks", "upcoming", "chores", "notes"];
 
 export default function DashboardPage() {
   const { user, membership, householdId } = useAuth();
@@ -166,6 +167,8 @@ export default function DashboardPage() {
   const [streaks, setStreaks] = useState<{ name: string; streak: number; weekPts: number }[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [widgetOrder, setWidgetOrder] = useState<WidgetId[]>(DEFAULT_WIDGET_ORDER);
+  const [editOrder, setEditOrder] = useState(false);
 
   const firstName = (user?.name as string)?.split(" ")[0] ?? "there";
   const householdName = membership?.expand?.household?.name ?? "";
@@ -221,12 +224,10 @@ export default function DashboardPage() {
 
       const custodyWeek = (membership?.expand?.household?.custody_week ?? "") as "odd" | "even" | "";
 
-      // Use all-household completions to determine what's done today
       const todayAllCompletions = allCompletions.filter(
         (c) => c.date === today || c.date.startsWith(today + " ") || c.date.startsWith(today + "T"),
       );
       function isDoneForUser(chore: Chore): boolean {
-        // "everyone" chore: only done for the current user if they completed it
         if (chore.type === "everyone") return todayAllCompletions.some(c => c.chore === chore.id && c.user === user!.id);
         return todayAllCompletions.some(c => c.chore === chore.id);
       }
@@ -266,13 +267,34 @@ export default function DashboardPage() {
     load().catch(() => setLoading(false));
   }, [householdId, user]);
 
+  useEffect(() => {
+    if (!membership?.id) return;
+    const saved = localStorage.getItem(`planner_today_order_${membership.id}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as WidgetId[];
+        if (DEFAULT_WIDGET_ORDER.every((id) => parsed.includes(id))) setWidgetOrder(parsed);
+      } catch { /* ignore bad json */ }
+    }
+  }, [membership?.id]);
+
+  function moveWidget(index: number, dir: -1 | 1) {
+    const next = [...widgetOrder];
+    const to = index + dir;
+    if (to < 0 || to >= next.length) return;
+    [next[index], next[to]] = [next[to], next[index]];
+    setWidgetOrder(next);
+    if (membership?.id) {
+      localStorage.setItem(`planner_today_order_${membership.id}`, JSON.stringify(next));
+    }
+  }
+
   async function completeTask(id: string) {
     await pb.collection("tasks").update(id, { completed: true });
     setAllTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
   const _today = todayStr();
-
   const overdueTasks = allTasks.filter((t) => !t.due_date || t.due_date < _today);
 
   type AgendaDay = { d: Date; ds: string; events: CalendarEvent[]; tasks: Task[] };
@@ -288,68 +310,63 @@ export default function DashboardPage() {
     if (dayEvts.length > 0 || dayTasks.length > 0) agendaDays.push({ d, ds, events: dayEvts, tasks: dayTasks });
   }
 
-  // todayChores only contains incomplete chores; todayDone/todayTotal track the full picture
+  function renderWidget(id: WidgetId, index: number): React.ReactNode {
+    const isFirst = index === 0;
+    const isLast = index === widgetOrder.length - 1;
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Greeting */}
-      <div className="pt-1">
-        <h1 className="text-xl font-bold">{greeting(firstName)}</h1>
-        {householdName && <p className="text-sm text-muted-foreground">{householdName}</p>}
+    const moveButtons = editOrder ? (
+      <div className="flex gap-0.5 ml-1.5 shrink-0">
+        <button
+          disabled={isFirst}
+          onClick={() => moveWidget(index, -1)}
+          className={cn("p-0.5 rounded transition-colors", isFirst ? "text-muted-foreground/25" : "text-muted-foreground hover:text-foreground")}
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+        <button
+          disabled={isLast}
+          onClick={() => moveWidget(index, 1)}
+          className={cn("p-0.5 rounded transition-colors", isLast ? "text-muted-foreground/25" : "text-muted-foreground hover:text-foreground")}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
       </div>
+    ) : null;
 
-      {/* Stats row */}
-      <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-3 flex items-center gap-4">
-        <ProgressRing done={todayDone} total={todayTotal} />
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-            <CheckCircle2 className="h-4 w-4" />
-            <span>{weeklyCompleted} done this week</span>
+    if (id === "streaks") {
+      if (!editOrder && streaks.length === 0) return null;
+      return (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 flex items-center">
+            <h2 className="font-bold text-sm flex items-center gap-1">🔥 Streaks</h2>
+            {moveButtons}
           </div>
-          <div className="flex items-center gap-1.5 text-sm text-amber-500 font-medium">
-            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
-            <span>{weekPoints} pts this week</span>
-          </div>
-        </div>
-        <div className="flex gap-3 shrink-0">
-          <div className="flex flex-col items-center gap-0.5">
-            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
-            <span className="text-sm font-black">{totalPoints}</span>
-            <span className="text-[10px] text-muted-foreground">total pts</span>
-          </div>
-          {(membership as any)?.pin && typeof (membership as any)?.balance === "number" && (
-            <div className="flex flex-col items-center gap-0.5">
-              <Wallet className="h-4 w-4 text-emerald-600" />
-              <span className="text-sm font-black text-emerald-600">${((membership as any).balance as number).toFixed(2)}</span>
-              <span className="text-[10px] text-muted-foreground">balance</span>
+          {streaks.length > 0 ? (
+            <div className="flex gap-3 px-4 pb-3 overflow-x-auto">
+              {streaks.map((s, i) => (
+                <div key={s.name} className="flex flex-col items-center gap-1 shrink-0 min-w-12">
+                  <span className="text-xl">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🔥"}</span>
+                  <span className="text-lg font-black">{s.streak}</span>
+                  <span className="text-[10px] text-muted-foreground font-medium">{s.name}</span>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div className="px-4 pb-3 text-sm text-muted-foreground">No streaks yet.</div>
           )}
         </div>
-      </div>
+      );
+    }
 
-      {/* Streaks */}
-      {streaks.length > 0 && (
-        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-2"><h2 className="font-bold text-sm flex items-center gap-1">🔥 Streaks</h2></div>
-          <div className="flex gap-3 px-4 pb-3 overflow-x-auto">
-            {streaks.map((s, i) => (
-              <div key={s.name} className="flex flex-col items-center gap-1 shrink-0 min-w-12">
-                <span className="text-xl">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🔥"}</span>
-                <span className="text-lg font-black">{s.streak}</span>
-                <span className="text-[10px] text-muted-foreground font-medium">{s.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Agenda: upcoming events + tasks */}
-      {(loading || overdueTasks.length > 0 || agendaDays.length > 0) && (
+    if (id === "upcoming") {
+      if (!editOrder && !loading && overdueTasks.length === 0 && agendaDays.length === 0) return null;
+      return (
         <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-base">📅</span>
               <h2 className="font-bold text-sm">Upcoming</h2>
+              {moveButtons}
             </div>
             <Link href="/calendar" className="text-xs text-orange-500 font-medium hover:underline">View calendar</Link>
           </div>
@@ -358,7 +375,6 @@ export default function DashboardPage() {
             <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
           ) : (
             <div className="flex flex-col gap-4 px-4 pb-4">
-              {/* Overdue tasks */}
               {overdueTasks.length > 0 && (
                 <div className="flex gap-3">
                   <div className="w-12 shrink-0 text-right pt-0.5">
@@ -384,7 +400,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Date groups */}
               {agendaDays.map(({ d, ds, events: dayEvts, tasks: dayTasks }) => {
                 const isToday = ds === _today;
                 const dayName = d.toLocaleDateString("en-AU", { weekday: "short" });
@@ -428,74 +443,144 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      )}
+      );
+    }
 
-      {/* Today's chores */}
-      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-        <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base">✅</span>
-            <h2 className="font-bold text-sm">Today's chores</h2>
+    if (id === "chores") {
+      return (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">✅</span>
+              <h2 className="font-bold text-sm">Today&apos;s chores</h2>
+              {moveButtons}
+            </div>
           </div>
-        </div>
 
-        {loading ? (
-          <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
-        ) : todayChores.length === 0 ? (
-          <div className="px-4 pb-4 text-sm text-muted-foreground">All done — nothing due today! 🎉</div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 pb-3">
-              {todayChores.map((chore) => {
-                const colors = choreCardColor(chore.id);
+          {loading ? (
+            <div className="px-4 pb-3 text-sm text-muted-foreground">Loading…</div>
+          ) : todayChores.length === 0 ? (
+            <div className="px-4 pb-4 text-sm text-muted-foreground">All done — nothing due today! 🎉</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 pb-3">
+                {todayChores.map((chore) => {
+                  const colors = choreCardColor(chore.id);
+                  return (
+                    <Link
+                      key={chore.id}
+                      href="/chores"
+                      className={cn(
+                        "rounded-2xl border p-3 flex flex-col items-center gap-1.5 text-center",
+                        colors,
+                      )}
+                    >
+                      <span className="text-3xl leading-none">{choreEmoji(chore.title)}</span>
+                      <p className="text-xs font-medium leading-tight">{chore.title}</p>
+                      {chore.points > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold">
+                          <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
+                          {chore.points} pts
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="px-4 pb-3">
+                <Link href="/chores" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (id === "notes") {
+      if (!editOrder && notes.length === 0) return null;
+      return (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <h2 className="font-bold text-sm">📝 Pinned notes</h2>
+              {moveButtons}
+            </div>
+            <Link href="/notes" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
+          </div>
+          {notes.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 px-4 pb-3">
+              {notes.map((note) => {
+                const cls = NOTE_BG[note.color ?? ""] ?? "bg-yellow-100 border-yellow-200";
                 return (
-                  <Link
-                    key={chore.id}
-                    href="/chores"
-                    className={cn(
-                      "rounded-2xl border p-3 flex flex-col items-center gap-1.5 text-center",
-                      colors,
-                    )}
-                  >
-                    <span className="text-3xl leading-none">{choreEmoji(chore.title)}</span>
-                    <p className="text-xs font-medium leading-tight">{chore.title}</p>
-                    {chore.points > 0 && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold">
-                        <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
-                        {chore.points} pts
-                      </span>
-                    )}
-                  </Link>
+                  <div key={note.id} className={cn("rounded-xl border p-2.5 text-xs", cls)}>
+                    <p className="line-clamp-3 whitespace-pre-wrap">{note.content}</p>
+                  </div>
                 );
               })}
             </div>
-            <div className="px-4 pb-3">
-              <Link href="/chores" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
-            </div>
-          </>
-        )}
+          ) : (
+            <div className="px-4 pb-3 text-sm text-muted-foreground">No pinned notes.</div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Greeting */}
+      <div className="pt-1 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold">{greeting(firstName)}</h1>
+          {householdName && <p className="text-sm text-muted-foreground">{householdName}</p>}
+        </div>
+        <button
+          onClick={() => setEditOrder((e) => !e)}
+          className={cn(
+            "p-1.5 rounded-lg transition-colors mt-0.5 shrink-0",
+            editOrder ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted",
+          )}
+          title={editOrder ? "Done arranging" : "Arrange widgets"}
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Pinned notes */}
-      {notes.length > 0 && (
-        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-            <h2 className="font-bold text-sm">📝 Pinned notes</h2>
-            <Link href="/notes" className="text-xs text-orange-500 font-medium hover:underline">View all</Link>
+      {/* Stats row — always at top */}
+      <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-3 flex items-center gap-4">
+        <ProgressRing done={todayDone} total={todayTotal} />
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>{weeklyCompleted} done this week</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 px-4 pb-3">
-            {notes.map((note) => {
-              const cls = NOTE_BG[note.color ?? ""] ?? "bg-yellow-100 border-yellow-200";
-              return (
-                <div key={note.id} className={cn("rounded-xl border p-2.5 text-xs", cls)}>
-                  <p className="line-clamp-3 whitespace-pre-wrap">{note.content}</p>
-                </div>
-              );
-            })}
+          <div className="flex items-center gap-1.5 text-sm text-amber-500 font-medium">
+            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
+            <span>{weekPoints} pts this week</span>
           </div>
         </div>
-      )}
+        <div className="flex gap-3 shrink-0">
+          <div className="flex flex-col items-center gap-0.5">
+            <Star className="h-4 w-4 fill-amber-400 stroke-amber-400" />
+            <span className="text-sm font-black">{totalPoints}</span>
+            <span className="text-[10px] text-muted-foreground">total pts</span>
+          </div>
+          {(membership as any)?.pin && typeof (membership as any)?.balance === "number" && (
+            <div className="flex flex-col items-center gap-0.5">
+              <Wallet className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-black text-emerald-600">${((membership as any).balance as number).toFixed(2)}</span>
+              <span className="text-[10px] text-muted-foreground">balance</span>
+            </div>
+          )}
+        </div>
+      </div>
 
+      {/* Reorderable widgets */}
+      {widgetOrder.map((id, index) => (
+        <React.Fragment key={id}>{renderWidget(id, index)}</React.Fragment>
+      ))}
     </div>
   );
 }

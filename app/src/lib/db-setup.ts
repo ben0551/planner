@@ -90,6 +90,7 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "invite_token", type: "text", required: true },
       { name: "custody_week", type: "text" },
       { name: "week_start", type: "text" },
+      { name: "kids_can_check_shopping", type: "bool" },
     ],
   });
 
@@ -280,6 +281,7 @@ export async function ensureSchema(): Promise<string[]> {
   await addMissingFields("households", [
     { name: "custody_week", type: "text" },
     { name: "week_start", type: "text" },
+    { name: "kids_can_check_shopping", type: "bool" },
   ]);
   await addMissingFields("memberships", [
     { name: "permissions", type: "json" },

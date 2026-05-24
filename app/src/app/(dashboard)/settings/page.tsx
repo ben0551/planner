@@ -55,6 +55,9 @@ function SettingsContent() {
   const [weekStartSaved, setWeekStartSaved] = useState(false);
   const [migrating, setMigrating] = useState(false);
 
+  const [kidsCanCheckShopping, setKidsCanCheckShopping] = useState(false);
+  const [kidsCanCheckSaving, setKidsCanCheckSaving] = useState(false);
+
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogItems, setCatalogItems] = useState<ShoppingCatalog[] | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -63,6 +66,7 @@ function SettingsContent() {
   const [catalogDraft, setCatalogDraft] = useState({ category: "", good_price: "" });
 
   useEffect(() => {
+    setKidsCanCheckShopping(!!(household as any)?.kids_can_check_shopping);
     setCustodyWeek((household?.custody_week as CustodyWeek) ?? "");
     if (household?.week_start) setWeekStart(household.week_start);
     else {
@@ -182,6 +186,18 @@ function SettingsContent() {
       setTimeout(() => setWeekStartSaved(false), 2000);
     } finally {
       setWeekStartSaving(false);
+    }
+  }
+
+  async function toggleKidsCanCheckShopping() {
+    if (!household?.id) return;
+    const next = !kidsCanCheckShopping;
+    setKidsCanCheckShopping(next);
+    setKidsCanCheckSaving(true);
+    try {
+      await pb.collection("households").update(household.id, { kids_can_check_shopping: next });
+    } finally {
+      setKidsCanCheckSaving(false);
     }
   }
 
@@ -516,6 +532,32 @@ function SettingsContent() {
           </div>
         )}
       </div>}
+
+      {/* Kids permissions — owners only */}
+      {isOwner && (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-1 border-b">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Kids Permissions</p>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Check shopping items</p>
+              <p className="text-xs text-muted-foreground">Allow kids to tick items into the basket during a shop.</p>
+            </div>
+            <button
+              onClick={toggleKidsCanCheckShopping}
+              disabled={kidsCanCheckSaving}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                kidsCanCheckShopping ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                kidsCanCheckShopping ? "translate-x-6" : "translate-x-1")} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Owner-only actions */}
       {isOwner && (

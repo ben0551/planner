@@ -50,6 +50,7 @@ export interface Household {
   invite_token: string;
   custody_week?: "odd" | "even" | "";
   week_start?: "mon" | "sun";
+  kids_can_check_shopping?: boolean;
 }
 
 export interface Membership {

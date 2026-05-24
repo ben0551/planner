@@ -17,6 +17,7 @@ export default function ShoppingPage() {
   const userId = user?.id ?? "";
   const isOwner = membership?.role === "owner";
   const isKid = !!(membership as any)?.pin && !isOwner;
+  const kidsCanCheck = !!(membership?.expand?.household as any)?.kids_can_check_shopping;
 
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -497,6 +498,7 @@ export default function ShoppingPage() {
           )}
           {groupItems.map((item) => {
             const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
+            const canCheck = !isKid || kidsCanCheck;
             return (
               <ShoppingRow
                 key={item.id}
@@ -505,13 +507,14 @@ export default function ShoppingPage() {
                 isCurrentUser={item.added_by === userId && !item.meal_note}
                 showAddedBy={sortMode !== "added_by"}
                 editing={editing?.id === item.id ? editing : null}
-                onToggle={toggleItem}
+                onToggle={canCheck ? toggleItem : () => {}}
                 onStartEdit={canEdit ? () => setEditing({ id: item.id, quantity: item.quantity ?? "", category: item.category ?? "", goodPrice: item.good_price ?? "" }) : () => {}}
                 onEditChange={(draft) => setEditing(draft)}
                 onSaveEdit={saveEdit}
                 onCancelEdit={() => setEditing(null)}
                 onDelete={canEdit ? () => deleteItem(item.id) : () => {}}
                 canModify={canEdit}
+                canCheck={canCheck}
               />
             );
           })}
@@ -523,6 +526,7 @@ export default function ShoppingPage() {
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">In basket</p>
           {checked.map((item) => {
             const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
+            const canCheck = !isKid || kidsCanCheck;
             return (
               <ShoppingRow
                 key={item.id}
@@ -531,13 +535,14 @@ export default function ShoppingPage() {
                 isCurrentUser={item.added_by === userId && !item.meal_note}
                 showAddedBy={sortMode !== "added_by"}
                 editing={null}
-                onToggle={toggleItem}
+                onToggle={canCheck ? toggleItem : () => {}}
                 onStartEdit={() => {}}
                 onEditChange={() => {}}
                 onSaveEdit={async () => {}}
                 onCancelEdit={() => {}}
                 onDelete={canEdit ? () => deleteItem(item.id) : () => {}}
                 canModify={canEdit}
+                canCheck={canCheck}
               />
             );
           })}
@@ -621,6 +626,7 @@ function ShoppingRow({
   onCancelEdit,
   onDelete,
   canModify = true,
+  canCheck = true,
 }: {
   item: ShoppingItem;
   addedByName: string | undefined;
@@ -634,12 +640,14 @@ function ShoppingRow({
   onCancelEdit: () => void;
   onDelete: () => void;
   canModify?: boolean;
+  canCheck?: boolean;
 }) {
   if (editing) {
     return (
       <div className="flex items-center gap-2 p-2 rounded-md bg-muted/30 flex-wrap">
-        <input type="checkbox" checked={item.checked} onChange={() => onToggle(item)}
-          className="h-4 w-4 rounded border-gray-300 cursor-pointer accent-primary flex-shrink-0" />
+        <input type="checkbox" checked={item.checked} onChange={() => canCheck !== false && onToggle(item)}
+          disabled={canCheck === false}
+          className="h-4 w-4 rounded border-gray-300 accent-primary flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed" />
         <span className="text-sm font-medium flex-1 min-w-24">{item.name}</span>
         <Input value={editing.quantity} onChange={(e) => onEditChange({ ...editing, quantity: e.target.value })} placeholder="Qty" className="h-7 w-20 text-xs" />
         <Input value={editing.category} onChange={(e) => onEditChange({ ...editing, category: e.target.value })} placeholder="Category" className="h-7 w-28 text-xs" />
@@ -653,8 +661,9 @@ function ShoppingRow({
 
   return (
     <div className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors group">
-      <input type="checkbox" checked={item.checked} onChange={() => onToggle(item)}
-        className="h-4 w-4 rounded border-gray-300 cursor-pointer accent-primary flex-shrink-0" />
+      <input type="checkbox" checked={item.checked} onChange={() => canCheck !== false && onToggle(item)}
+        disabled={canCheck === false}
+        className="h-4 w-4 rounded border-gray-300 accent-primary flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed" />
       <span className={`flex-1 text-sm ${item.checked ? "line-through text-muted-foreground" : ""}`}>{item.name}</span>
       {item.quantity && <span className="text-xs text-muted-foreground shrink-0">{item.quantity}</span>}
       {item.good_price && (
