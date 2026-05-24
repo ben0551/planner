@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X } from "lucide-react";
+import { Users, UserPlus, ChevronRight, ChevronDown, CalendarRange, Database, CalendarDays, Moon, Sun, ShoppingCart, Pencil, Check, Trash2, Search, X, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { THEMES, applyTheme } from "@/lib/themes";
 
 type CustodyWeek = "odd" | "even" | "";
 
@@ -43,6 +44,16 @@ function SettingsContent() {
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("planner_dark", next ? "1" : "0");
+  }
+
+  const [themeName, setThemeName] = useState(membership?.theme ?? "violet");
+  useEffect(() => { if (membership?.theme) setThemeName(membership.theme); }, [membership?.theme]);
+  async function saveTheme(name: string) {
+    setThemeName(name);
+    applyTheme(name);
+    if ((membership as any)?.id) {
+      await pb.collection("memberships").update((membership as any).id, { theme: name });
+    }
   }
 
   const [custodyWeek, setCustodyWeek] = useState<CustodyWeek>("");
@@ -261,6 +272,33 @@ function SettingsContent() {
             <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
               dark ? "translate-x-6" : "translate-x-1")} />
           </button>
+        </div>
+      </div>
+
+      {/* Theme picker */}
+      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+        <div className="px-4 py-3 flex items-center gap-2 border-b">
+          <Palette className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Theme</span>
+        </div>
+        <div className="px-4 py-3 grid grid-cols-6 gap-2">
+          {THEMES.map((t) => (
+            <button
+              key={t.name}
+              title={t.label}
+              onClick={() => saveTheme(t.name)}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl p-1.5 transition-all",
+                themeName === t.name ? "ring-2 ring-primary ring-offset-1" : "hover:bg-muted/40"
+              )}
+            >
+              <span
+                className="h-8 w-8 rounded-full shadow-sm"
+                style={{ background: t.gradient }}
+              />
+              <span className="text-[9px] text-muted-foreground leading-tight text-center">{t.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
