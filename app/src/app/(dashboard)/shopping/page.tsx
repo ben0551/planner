@@ -36,6 +36,9 @@ export default function ShoppingPage() {
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
 
+  const [completeShopPrompt, setCompleteShopPrompt] = useState(false);
+  const [completingShop, setCompletingShop] = useState(false);
+
   const [showHistory, setShowHistory] = useState(false);
   const [archivedLists, setArchivedLists] = useState<ShoppingList[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -179,54 +182,42 @@ export default function ShoppingPage() {
     if (selectedListId === id) setSelectedListId(remaining[0]?.id ?? "");
   }
 
-  async function completeShop() {
+  async function doCompleteShop(moveUnchecked: boolean) {
     if (!selectedListId || !householdId) return;
     const currentList = lists.find((l) => l.id === selectedListId);
     if (!currentList) return;
-
-    const uncheckedItems = listItems.filter((i) => !i.checked);
-    const checkedCount = listItems.length - uncheckedItems.length;
-
-    if (!confirm(`Complete this "${currentList.name}" shop? ${checkedCount} checked item${checkedCount === 1 ? "" : "s"} will be saved to history.`)) return;
-
-    const moveUnchecked =
-      uncheckedItems.length > 0 &&
-      confirm(
-        `${uncheckedItems.length} item${uncheckedItems.length === 1 ? " wasn't" : "s weren't"} checked off. Move ${uncheckedItems.length === 1 ? "it" : "them"} to the next shop?`,
+    setCompleteShopPrompt(false);
+    setCompletingShop(true);
+    try {
+      const uncheckedItems = listItems.filter((i) => !i.checked);
+      const isFirst = lists[0].id === selectedListId;
+      if (isFirst) {
+        const nullItems = items.filter((i) => !i.list);
+        await Promise.all(nullItems.map((i) => pb.collection("shopping_items").update(i.id, { list: selectedListId })));
+      }
+      const now = new Date().toISOString().slice(0, 10);
+      await pb.collection("shopping_lists").update(selectedListId, { archived: true, archived_at: now });
+      const fresh = await pb.collection("shopping_lists").create({ household: householdId, name: currentList.name, archived: false });
+      const freshList = fresh as unknown as ShoppingList;
+      if (moveUnchecked && uncheckedItems.length > 0) {
+        await Promise.all(uncheckedItems.map((i) =>
+          pb.collection("shopping_items").update(i.id, { list: freshList.id, checked: false })
+        ));
+      }
+      const currentIds = new Set(listItems.map((i) => i.id));
+      const uncheckedIds = new Set(uncheckedItems.map((i) => i.id));
+      setLists((prev) => prev.map((l) => l.id === selectedListId ? freshList : l));
+      setSelectedListId(freshList.id);
+      setItems((prev) =>
+        prev
+          .filter((i) => !currentIds.has(i.id) || (moveUnchecked && uncheckedIds.has(i.id)))
+          .map((i) => uncheckedIds.has(i.id) ? { ...i, list: freshList.id, checked: false } : i)
       );
-
-    // Assign legacy null-list items to this list if it's the first one
-    const isFirst = lists[0].id === selectedListId;
-    if (isFirst) {
-      const nullItems = items.filter((i) => !i.list);
-      await Promise.all(nullItems.map((i) => pb.collection("shopping_items").update(i.id, { list: selectedListId })));
-    }
-
-    const now = new Date().toISOString().slice(0, 10);
-    await pb.collection("shopping_lists").update(selectedListId, { archived: true, archived_at: now });
-
-    const fresh = await pb.collection("shopping_lists").create({ household: householdId, name: currentList.name, archived: false });
-    const freshList = fresh as unknown as ShoppingList;
-
-    if (moveUnchecked && uncheckedItems.length > 0) {
-      await Promise.all(uncheckedItems.map((i) =>
-        pb.collection("shopping_items").update(i.id, { list: freshList.id, checked: false })
-      ));
-    }
-
-    const currentIds = new Set(listItems.map((i) => i.id));
-    const uncheckedIds = new Set(uncheckedItems.map((i) => i.id));
-
-    setLists((prev) => prev.map((l) => l.id === selectedListId ? freshList : l));
-    setSelectedListId(freshList.id);
-    setItems((prev) =>
-      prev
-        .filter((i) => !currentIds.has(i.id) || (moveUnchecked && uncheckedIds.has(i.id)))
-        .map((i) => uncheckedIds.has(i.id) ? { ...i, list: freshList.id, checked: false } : i)
-    );
-
-    if (showHistory) {
-      setArchivedLists((prev) => [{ ...currentList, archived: true, archived_at: now }, ...prev]);
+      if (showHistory) {
+        setArchivedLists((prev) => [{ ...currentList, archived: true, archived_at: now }, ...prev]);
+      }
+    } finally {
+      setCompletingShop(false);
     }
   }
 
@@ -308,13 +299,55 @@ export default function ShoppingPage() {
             </Button>
           )}
           {listItems.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={completeShop} className="text-muted-foreground flex items-center gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setCompleteShopPrompt(true)} disabled={completingShop} className="text-muted-foreground flex items-center gap-1.5">
               <Archive className="h-3.5 w-3.5" />
-              Complete shop
+              {completingShop ? "Saving…" : "Complete shop"}
             </Button>
           )}
         </div>
       </div>
+
+      {/* Complete shop prompt */}
+      {completeShopPrompt && (() => {
+        const unchecked = listItems.filter((i) => !i.checked);
+        const checkedCount = listItems.length - unchecked.length;
+        const currentList = lists.find((l) => l.id === selectedListId);
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4" onClick={() => setCompleteShopPrompt(false)}>
+            <div className="w-full max-w-sm rounded-2xl bg-card border border-border shadow-xl p-5 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+              <div>
+                <p className="font-bold text-base">Complete "{currentList?.name}"?</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {checkedCount} item{checkedCount === 1 ? "" : "s"} checked off
+                  {unchecked.length > 0 && `, ${unchecked.length} still unchecked`}.
+                </p>
+              </div>
+              {unchecked.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <Button onClick={() => doCompleteShop(true)} className="w-full rounded-xl">
+                    Move {unchecked.length} unchecked item{unchecked.length === 1 ? "" : "s"} to next shop
+                  </Button>
+                  <Button variant="outline" onClick={() => doCompleteShop(false)} className="w-full rounded-xl">
+                    Complete without moving
+                  </Button>
+                  <Button variant="ghost" onClick={() => setCompleteShopPrompt(false)} className="w-full rounded-xl text-muted-foreground">
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Button onClick={() => doCompleteShop(false)} className="w-full rounded-xl">
+                    Complete shop
+                  </Button>
+                  <Button variant="ghost" onClick={() => setCompleteShopPrompt(false)} className="w-full rounded-xl text-muted-foreground">
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* List tabs */}
       <div className="flex gap-1 items-center flex-wrap">
