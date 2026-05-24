@@ -80,31 +80,61 @@ function isoWeekNumber(date: Date): number {
   return 1 + Math.round(((d.getTime() - jan4.getTime()) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7);
 }
 
-function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
-  if (chore.recurrence === "daily") return true;
+function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | "", startOnSun?: boolean): boolean {
+  const dow = new Date(dateStr + "T12:00:00").getDay();
+  // When the week display starts on Sunday, shift Sunday dates forward by one day so
+  // that they share the same ISO week number as the Mon–Sat days in the same display week.
+  const weekCalcDate = (() => {
+    const d = new Date(dateStr + "T12:00:00");
+    if (startOnSun && d.getDay() === 0) { const s = new Date(d); s.setDate(s.getDate() + 1); return s; }
+    return d;
+  })();
+  const allowedDays = chore.days ? chore.days.split(",").map(Number).filter(n => !isNaN(n)) : [];
+  const dayAllowed = allowedDays.length === 0 || allowedDays.includes(dow);
+  if (chore.recurrence === "daily") return dayAllowed;
   if (chore.recurrence === "weekly") {
-    if (!chore.due_date) return true;
-    return new Date(dateStr + "T12:00:00").getDay() === new Date(chore.due_date + "T12:00:00").getDay();
+    if (!chore.due_date) return dayAllowed;
+    return dow === new Date(chore.due_date + "T12:00:00").getDay();
   }
-  if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
-  if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
+  if (chore.recurrence === "odd_week") return isoWeekNumber(weekCalcDate) % 2 === 1 && dayAllowed;
+  if (chore.recurrence === "even_week") return isoWeekNumber(weekCalcDate) % 2 === 0 && dayAllowed;
   if (chore.recurrence === "my_week") {
-    if (!custodyWeek) return false; // no custody schedule set
-    const weekNum = isoWeekNumber(new Date(dateStr));
-    return custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0;
+    if (!custodyWeek) return false;
+    const weekNum = isoWeekNumber(weekCalcDate);
+    return (custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0) && dayAllowed;
   }
   if (chore.recurrence === "fortnightly") {
-    if (!chore.due_date) return true;
+    if (!chore.due_date) return dayAllowed;
     const ref = new Date(chore.due_date);
     const target = new Date(dateStr);
     const diffWeeks = Math.round((target.getTime() - ref.getTime()) / (7 * 86400000));
-    return diffWeeks % 2 === 0;
+    return diffWeeks % 2 === 0 && dayAllowed;
   }
   if (chore.recurrence === "monthly") {
     if (!chore.due_date) return true;
     return new Date(chore.due_date).getDate() === new Date(dateStr).getDate();
   }
   return chore.due_date ? chore.due_date.startsWith(dateStr) : false;
+}
+
+function recurrenceLabel(chore: Chore): string {
+  const days = chore.days ? chore.days.split(",").map(Number).filter(n => !isNaN(n)) : [];
+  const abbr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const daysStr = days.length > 0 ? ` · ${days.map(d => abbr[d]).join(", ")}` : "";
+  switch (chore.recurrence) {
+    case "daily": return `Daily${daysStr}`;
+    case "weekly": {
+      if (chore.due_date) return `Weekly · ${abbr[new Date(chore.due_date + "T12:00:00").getDay()]}`;
+      return "Weekly";
+    }
+    case "odd_week": return `Odd weeks${daysStr}`;
+    case "even_week": return `Even weeks${daysStr}`;
+    case "my_week": return `My week${daysStr}`;
+    case "fortnightly": return `Fortnightly${daysStr}`;
+    case "monthly": return "Monthly";
+    case "none": return chore.due_date ? `Once · ${chore.due_date}` : "Once";
+    default: return chore.recurrence;
+  }
 }
 
 function formatDeadline(t: string): string {
@@ -133,11 +163,12 @@ interface ChoreFormState {
   weekDay: string;
   points: number;
   deadlineTime: string;
+  days: number[];
 }
 
 const defaultForm = (): ChoreFormState => ({
   title: "", type: "single", scope: "all", assignee: "",
-  recurrence: "daily", dueDate: "", weekDay: "", points: 1, deadlineTime: "",
+  recurrence: "daily", dueDate: "", weekDay: "", points: 1, deadlineTime: "", days: [],
 });
 
 function nearestPastWeekday(day: number): string {
@@ -159,6 +190,7 @@ function formFromChore(c: Chore): ChoreFormState {
       : "",
     points: c.points ?? 1,
     deadlineTime: c.deadline_time ?? "",
+    days: c.days ? c.days.split(",").map(Number).filter(n => !isNaN(n)) : [],
   };
 }
 
@@ -293,6 +325,7 @@ export default function ChoresPage() {
       else if (form.recurrence !== "none") payload.due_date = null;
       if (form.deadlineTime) payload.deadline_time = form.deadlineTime;
       else payload.deadline_time = null;
+      payload.days = form.days.length > 0 ? form.days.join(",") : null;
       if (editingId) {
         await pb.collection("chores").update(editingId, payload);
         const full = await pb.collection("chores").getOne(editingId, { expand: "assignee" });
@@ -411,95 +444,128 @@ export default function ChoresPage() {
             >
               {adminView ? "← Back" : "Admin"}
             </button>
-            {!adminView && (
-              <button
-                onClick={() => showForm ? cancelForm() : setShowForm(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
-              >
-                <Plus className="h-4 w-4" />
-                Add chore
-              </button>
-            )}
+            <button
+              onClick={() => showForm ? cancelForm() : setShowForm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+            >
+              <Plus className="h-4 w-4" />
+              Add chore
+            </button>
           </div>
         )}
       </div>
 
       {/* Admin view */}
       {adminView && isOwner && (() => {
-        const adminDayChores = activeChores.filter(c => isDueOnDate(c, adminDay, custodyWeek));
+        const adminDayChores = activeChores.filter(c => isDueOnDate(c, adminDay, custodyWeek, startOnSun));
+        const recurringChores = chores
+          .filter(c => c.recurrence !== "none")
+          .sort((a, b) => a.title.localeCompare(b.title));
         return (
-          <div className="flex flex-col gap-3">
-            {/* Day tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-1">
-              {weekDates.map((date, i) => {
-                const ds = toDateStr(date);
-                const isToday = ds === todayStr;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setAdminDay(ds)}
-                    className={cn(
-                      "flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-xl text-xs font-bold transition-colors",
-                      adminDay === ds
-                        ? "bg-primary text-primary-foreground"
-                        : isToday
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    <span>{DAY_NAMES[i]}</span>
-                    <span className="text-[10px] font-normal">{date.getDate()}</span>
-                  </button>
-                );
-              })}
+          <div className="flex flex-col gap-4">
+            {/* Day completion tracker */}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-1 overflow-x-auto pb-1">
+                {weekDates.map((date, i) => {
+                  const ds = toDateStr(date);
+                  const isToday = ds === todayStr;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setAdminDay(ds)}
+                      className={cn(
+                        "flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-xl text-xs font-bold transition-colors",
+                        adminDay === ds
+                          ? "bg-primary text-primary-foreground"
+                          : isToday
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      <span>{DAY_NAMES[i]}</span>
+                      <span className="text-[10px] font-normal">{date.getDate()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {adminDayChores.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No chores on this day.</p>
+              ) : (
+                <div className="rounded-2xl bg-card border border-border overflow-hidden divide-y">
+                  {adminDayChores.map(chore => {
+                    const scopeKids = chore.type === "everyone"
+                      ? (chore.scope === "kids" ? kidMembers : members)
+                      : chore.assignee
+                        ? members.filter(m => m.id === chore.assignee)
+                        : kidMembers;
+                    return (
+                      <div key={chore.id} className="px-4 py-3 flex items-center gap-3">
+                        <span className="text-xl shrink-0">{choreEmoji(chore.title)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate">{chore.title}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {chore.type === "everyone" ? "everyone" : chore.assignee ? (members.find(m => m.id === chore.assignee)?.name ?? "?") : chore.scope === "kids" ? "kids only" : "anyone"}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 flex-wrap justify-end">
+                          {scopeKids.map(kid => {
+                            const kidDone = completions.some(c =>
+                              c.chore === chore.id && dateMatchesDay(c.date, adminDay) && c.user === kid.id
+                            );
+                            return (
+                              <button
+                                key={kid.id}
+                                onClick={() => toggleForKid(chore, adminDay, kid.id)}
+                                className={cn(
+                                  "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors",
+                                  kidDone
+                                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                    : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                                )}
+                              >
+                                <span>{kidDone ? "✓" : "○"}</span>
+                                <span>{kid.name.split(" ")[0]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {adminDayChores.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No chores on this day.</p>
-            ) : (
-              <div className="rounded-2xl bg-card border border-border overflow-hidden divide-y">
-                {adminDayChores.map(chore => {
-                  const scopeKids = chore.type === "everyone"
-                    ? (chore.scope === "kids" ? kidMembers : members)
-                    : chore.assignee
-                      ? members.filter(m => m.id === chore.assignee)
-                      : kidMembers;
-                  return (
+            {/* All recurring chores management */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">All recurring chores</p>
+              {recurringChores.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No recurring chores yet.</p>
+              ) : (
+                <div className="rounded-2xl bg-card border border-border overflow-hidden divide-y">
+                  {recurringChores.map(chore => (
                     <div key={chore.id} className="px-4 py-3 flex items-center gap-3">
                       <span className="text-xl shrink-0">{choreEmoji(chore.title)}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold truncate">{chore.title}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {chore.type === "everyone" ? "everyone" : chore.assignee ? (members.find(m => m.id === chore.assignee)?.name ?? "?") : chore.scope === "kids" ? "kids only" : "anyone"}
-                        </p>
+                        <p className="text-[11px] text-muted-foreground">{recurrenceLabel(chore)}</p>
                       </div>
-                      <div className="flex gap-2 flex-wrap justify-end">
-                        {scopeKids.map(kid => {
-                          const kidDone = completions.some(c =>
-                            c.chore === chore.id && dateMatchesDay(c.date, adminDay) && c.user === kid.id
-                          );
-                          return (
-                            <button
-                              key={kid.id}
-                              onClick={() => toggleForKid(chore, adminDay, kid.id)}
-                              className={cn(
-                                "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors",
-                                kidDone
-                                  ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                                  : "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
-                              )}
-                            >
-                              <span>{kidDone ? "✓" : "○"}</span>
-                              <span>{kid.name.split(" ")[0]}</span>
-                            </button>
-                          );
-                        })}
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => { startEdit(chore); }}
+                          className="text-xs text-muted-foreground hover:text-foreground bg-muted/60 rounded-lg px-2 py-1 transition-colors"
+                        >✎ Edit</button>
+                        <button
+                          onClick={() => deleteChore(chore.id)}
+                          className="text-xs text-muted-foreground hover:text-destructive bg-muted/60 rounded-lg px-2 py-1 transition-colors"
+                        >✕</button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -527,7 +593,7 @@ export default function ChoresPage() {
       )}
 
       {/* Add / Edit form */}
-      {!adminView && showForm && (
+      {showForm && (
         <div className="rounded-3xl bg-card border border-border shadow-sm p-4 flex flex-col gap-3">
           <p className="font-black text-sm">{editingId ? "Edit chore" : "New chore"}</p>
 
@@ -616,6 +682,31 @@ export default function ChoresPage() {
             )}
           </div>
 
+          {["daily", "odd_week", "even_week", "my_week", "fortnightly"].includes(form.recurrence) && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Which days? <span className="text-muted-foreground font-normal">(empty = all days)</span></Label>
+              <div className="flex gap-1 flex-wrap">
+                {(startOnSun ? [0,1,2,3,4,5,6] : [1,2,3,4,5,6,0]).map(dayNum => {
+                  const abbr = ["Su","Mo","Tu","We","Th","Fr","Sa"][dayNum];
+                  const selected = form.days.includes(dayNum);
+                  return (
+                    <button
+                      key={dayNum}
+                      type="button"
+                      onClick={() => setField("days", selected ? form.days.filter(d => d !== dayNum) : [...form.days, dayNum])}
+                      className={cn(
+                        "h-8 w-9 rounded-lg text-xs font-bold transition-colors",
+                        selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      )}
+                    >
+                      {abbr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1">
             <Label className="text-xs">Must complete by (optional) ⏰</Label>
             <Input type="time" value={form.deadlineTime}
@@ -664,7 +755,7 @@ export default function ChoresPage() {
             {weekDates.map((date, i) => {
               const ds = toDateStr(date);
               const isToday = ds === todayStr;
-              const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
+              const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek, startOnSun));
               const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
               const allDone = dueChores.length > 0 && doneCount === dueChores.length;
 
@@ -708,7 +799,7 @@ export default function ChoresPage() {
                 const ds = toDateStr(date);
                 const isToday = ds === todayStr;
                 const selected = i === selectedDay;
-                const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
+                const dueChores = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek, startOnSun));
                 const doneCount = dueChores.filter(c => isCompletedOnDate(c, ds)).length;
                 return (
                   <button key={ds} onClick={() => setSelectedDay(i)}
@@ -736,7 +827,7 @@ export default function ChoresPage() {
             {/* Chore cards for selected day */}
             {(() => {
               const ds = toDateStr(weekDates[selectedDay]);
-              const dueToday = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek));
+              const dueToday = activeChores.filter(c => isDueOnDate(c, ds, custodyWeek, startOnSun));
               if (dueToday.length === 0) {
                 return (
                   <div className="rounded-3xl border border-dashed border-muted-foreground/30 p-8 text-center text-sm text-muted-foreground">

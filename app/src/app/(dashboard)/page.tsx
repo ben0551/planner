@@ -75,25 +75,33 @@ function isoWeekNumber(date: Date): number {
   return 1 + Math.round(((d.getTime() - jan4.getTime()) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7);
 }
 
-function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | ""): boolean {
-  if (chore.recurrence === "daily") return true;
+function isDueOnDate(chore: Chore, dateStr: string, custodyWeek?: "odd" | "even" | "", startOnSun?: boolean): boolean {
+  const dow = new Date(dateStr + "T12:00:00").getDay();
+  const weekCalcDate = (() => {
+    const d = new Date(dateStr + "T12:00:00");
+    if (startOnSun && d.getDay() === 0) { const s = new Date(d); s.setDate(s.getDate() + 1); return s; }
+    return d;
+  })();
+  const allowedDays = chore.days ? chore.days.split(",").map(Number).filter(n => !isNaN(n)) : [];
+  const dayAllowed = allowedDays.length === 0 || allowedDays.includes(dow);
+  if (chore.recurrence === "daily") return dayAllowed;
   if (chore.recurrence === "weekly") {
-    if (!chore.due_date) return true;
-    return new Date(dateStr + "T12:00:00").getDay() === new Date(chore.due_date + "T12:00:00").getDay();
+    if (!chore.due_date) return dayAllowed;
+    return dow === new Date(chore.due_date + "T12:00:00").getDay();
   }
-  if (chore.recurrence === "odd_week") return isoWeekNumber(new Date(dateStr)) % 2 === 1;
-  if (chore.recurrence === "even_week") return isoWeekNumber(new Date(dateStr)) % 2 === 0;
+  if (chore.recurrence === "odd_week") return isoWeekNumber(weekCalcDate) % 2 === 1 && dayAllowed;
+  if (chore.recurrence === "even_week") return isoWeekNumber(weekCalcDate) % 2 === 0 && dayAllowed;
   if (chore.recurrence === "my_week") {
     if (!custodyWeek) return false;
-    const weekNum = isoWeekNumber(new Date(dateStr));
-    return custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0;
+    const weekNum = isoWeekNumber(weekCalcDate);
+    return (custodyWeek === "odd" ? weekNum % 2 === 1 : weekNum % 2 === 0) && dayAllowed;
   }
   if (chore.recurrence === "fortnightly") {
-    if (!chore.due_date) return true;
+    if (!chore.due_date) return dayAllowed;
     const ref = new Date(chore.due_date);
     const target = new Date(dateStr);
     const diffWeeks = Math.round((target.getTime() - ref.getTime()) / (7 * 86400000));
-    return diffWeeks % 2 === 0;
+    return diffWeeks % 2 === 0 && dayAllowed;
   }
   if (chore.recurrence === "monthly") {
     if (!chore.due_date) return true;
@@ -211,7 +219,7 @@ export default function DashboardPage() {
       ]);
 
       const custodyWeek = (membership?.expand?.household?.custody_week ?? "") as "odd" | "even" | "";
-      const due = chores.filter((c) => isDueOnDate(c, today, custodyWeek)).slice(0, 5);
+      const due = chores.filter((c) => isDueOnDate(c, today, custodyWeek, startOnSun)).slice(0, 5);
 
       const wPts = myWeekCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
       const allPts = allMyCompletions.reduce((s, c) => s + (c.points ?? 0), 0);

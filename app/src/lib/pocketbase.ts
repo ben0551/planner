@@ -89,7 +89,8 @@ export interface Chore {
   due_date?: string;
   completed: boolean;
   points: number;
-  deadline_time?: string; // HH:MM, e.g. "20:00" — must complete by this time for full points
+  deadline_time?: string;
+  days?: string; // comma-separated JS day numbers, e.g. "1,2,3,4,5" for Mon–Fri
   expand?: { assignee?: User };
 }
 

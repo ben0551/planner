@@ -147,6 +147,11 @@ export default function ShoppingPage() {
     setItems((prev) => prev.filter((i) => !ids.has(i.id)));
   }
 
+  async function deleteItem(id: string) {
+    await pb.collection("shopping_items").delete(id);
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
   async function addList() {
     if (!newListName.trim() || !householdId) return;
     const created = await pb.collection("shopping_lists").create({ household: householdId, name: newListName.trim(), archived: false });
@@ -468,6 +473,7 @@ export default function ShoppingPage() {
               onEditChange={(draft) => setEditing(draft)}
               onSaveEdit={saveEdit}
               onCancelEdit={() => setEditing(null)}
+              onDelete={() => deleteItem(item.id)}
             />
           ))}
         </div>
@@ -489,6 +495,7 @@ export default function ShoppingPage() {
               onEditChange={() => {}}
               onSaveEdit={async () => {}}
               onCancelEdit={() => {}}
+              onDelete={() => deleteItem(item.id)}
             />
           ))}
         </div>
@@ -569,6 +576,7 @@ function ShoppingRow({
   onEditChange,
   onSaveEdit,
   onCancelEdit,
+  onDelete,
 }: {
   item: ShoppingItem;
   addedByName: string | undefined;
@@ -580,6 +588,7 @@ function ShoppingRow({
   onEditChange: (draft: EditDraft) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
+  onDelete: () => void;
 }) {
   if (editing) {
     return (
@@ -617,6 +626,9 @@ function ShoppingRow({
           <Pencil className="h-3.5 w-3.5" />
         </button>
       )}
+      <button onClick={onDelete} className="hidden group-hover:flex text-muted-foreground hover:text-destructive transition-colors shrink-0">
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

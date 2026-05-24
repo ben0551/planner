@@ -118,6 +118,7 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "deadline_time", type: "text" },
       { name: "completed", type: "bool" },
       { name: "points", type: "number" },
+      { name: "days", type: "text" },
     ],
   });
 
@@ -292,6 +293,7 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "type", ...sel(["single", "everyone", "shared"]) },
     { name: "scope", type: "text" },
     { name: "deadline_time", type: "text" },
+    { name: "days", type: "text" },
   ]);
   await addMissingFields("meals", [{ name: "meal_type", type: "text" }]);
   await addMissingFields("meal_recipes", [
