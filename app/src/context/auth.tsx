@@ -50,14 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
   const [membershipTick, setMembershipTick] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const unsub = pb.authStore.onChange((_, record) => {
       setUser(record);
-      if (!record) setMembership(null);
+      if (!record) { setMembership(null); setIsAdmin(false); }
     });
     return () => unsub();
   }, [pb]);
+
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    fetch("/api/admin/me", { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(d.isAdmin === true))
+      .catch(() => setIsAdmin(false));
+  }, [user?.id, pb]);
 
   function refreshMembership() {
     setMembershipTick((t) => t + 1);
@@ -127,9 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applyTheme(undefined); // reset to default violet
   }
 
-  const isAdmin = Boolean(
-    user?.email && process.env.NEXT_PUBLIC_ADMIN_EMAIL && user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
-  );
   const householdStatus = membership?.expand?.household?.status || "active";
 
   return (

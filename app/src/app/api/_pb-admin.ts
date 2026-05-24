@@ -18,7 +18,7 @@ export async function getAuthEmail(authHeader: string | null): Promise<string | 
 }
 
 export function isAdminEmail(email: string | null): boolean {
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  const adminEmail = process.env.ADMIN_EMAIL ?? process.env.NEXT_PUBLIC_ADMIN_EMAIL;
   return Boolean(adminEmail && email === adminEmail);
 }
 
