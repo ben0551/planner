@@ -12,9 +12,11 @@ type Member = { id: string; name: string };
 type SortMode = "category" | "name" | "added_by";
 
 export default function ShoppingPage() {
-  const { householdId, user } = useAuth();
+  const { householdId, user, membership } = useAuth();
   const pb = getClient();
   const userId = user?.id ?? "";
+  const isOwner = membership?.role === "owner";
+  const isKid = !!(membership as any)?.pin && !isOwner;
 
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -493,44 +495,52 @@ export default function ShoppingPage() {
           {groupKey && (
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{groupKey}</p>
           )}
-          {groupItems.map((item) => (
-            <ShoppingRow
-              key={item.id}
-              item={item}
-              addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
-              isCurrentUser={item.added_by === userId && !item.meal_note}
-              showAddedBy={sortMode !== "added_by"}
-              editing={editing?.id === item.id ? editing : null}
-              onToggle={toggleItem}
-              onStartEdit={() => setEditing({ id: item.id, quantity: item.quantity ?? "", category: item.category ?? "", goodPrice: item.good_price ?? "" })}
-              onEditChange={(draft) => setEditing(draft)}
-              onSaveEdit={saveEdit}
-              onCancelEdit={() => setEditing(null)}
-              onDelete={() => deleteItem(item.id)}
-            />
-          ))}
+          {groupItems.map((item) => {
+            const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
+            return (
+              <ShoppingRow
+                key={item.id}
+                item={item}
+                addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
+                isCurrentUser={item.added_by === userId && !item.meal_note}
+                showAddedBy={sortMode !== "added_by"}
+                editing={editing?.id === item.id ? editing : null}
+                onToggle={toggleItem}
+                onStartEdit={canEdit ? () => setEditing({ id: item.id, quantity: item.quantity ?? "", category: item.category ?? "", goodPrice: item.good_price ?? "" }) : () => {}}
+                onEditChange={(draft) => setEditing(draft)}
+                onSaveEdit={saveEdit}
+                onCancelEdit={() => setEditing(null)}
+                onDelete={canEdit ? () => deleteItem(item.id) : () => {}}
+                canModify={canEdit}
+              />
+            );
+          })}
         </div>
       ))}
 
       {checked.length > 0 && (
         <div className="flex flex-col gap-1 opacity-50">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">In basket</p>
-          {checked.map((item) => (
-            <ShoppingRow
-              key={item.id}
-              item={item}
-              addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
-              isCurrentUser={item.added_by === userId && !item.meal_note}
-              showAddedBy={sortMode !== "added_by"}
-              editing={null}
-              onToggle={toggleItem}
-              onStartEdit={() => {}}
-              onEditChange={() => {}}
-              onSaveEdit={async () => {}}
-              onCancelEdit={() => {}}
-              onDelete={() => deleteItem(item.id)}
-            />
-          ))}
+          {checked.map((item) => {
+            const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
+            return (
+              <ShoppingRow
+                key={item.id}
+                item={item}
+                addedByName={item.meal_note ? "Planner" : memberName(item.added_by)}
+                isCurrentUser={item.added_by === userId && !item.meal_note}
+                showAddedBy={sortMode !== "added_by"}
+                editing={null}
+                onToggle={toggleItem}
+                onStartEdit={() => {}}
+                onEditChange={() => {}}
+                onSaveEdit={async () => {}}
+                onCancelEdit={() => {}}
+                onDelete={canEdit ? () => deleteItem(item.id) : () => {}}
+                canModify={canEdit}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -610,6 +620,7 @@ function ShoppingRow({
   onSaveEdit,
   onCancelEdit,
   onDelete,
+  canModify = true,
 }: {
   item: ShoppingItem;
   addedByName: string | undefined;
@@ -622,6 +633,7 @@ function ShoppingRow({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   onDelete: () => void;
+  canModify?: boolean;
 }) {
   if (editing) {
     return (
@@ -654,14 +666,16 @@ function ShoppingRow({
       {addedByName && !isCurrentUser && showAddedBy && (
         <span className="text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full shrink-0">{addedByName}</span>
       )}
-      {!item.checked && (
+      {!item.checked && canModify && (
         <button onClick={onStartEdit} className="hidden group-hover:flex text-muted-foreground hover:text-foreground transition-colors shrink-0">
           <Pencil className="h-3.5 w-3.5" />
         </button>
       )}
-      <button onClick={onDelete} className="hidden group-hover:flex text-muted-foreground hover:text-destructive transition-colors shrink-0">
-        <X className="h-3.5 w-3.5" />
-      </button>
+      {canModify && (
+        <button onClick={onDelete} className="hidden group-hover:flex text-muted-foreground hover:text-destructive transition-colors shrink-0">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }

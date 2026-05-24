@@ -430,8 +430,8 @@ function SettingsContent() {
         </div>
       )}
 
-      {/* Shopping Catalog */}
-      <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+      {/* Shopping Catalog — admin only */}
+      {isOwner && <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
         <button
           onClick={() => { setShowCatalog((s) => !s); if (!showCatalog) loadCatalog(); }}
           className="w-full px-4 py-3 flex items-center gap-2 hover:bg-muted/30 transition-colors text-left"
@@ -515,7 +515,7 @@ function SettingsContent() {
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Owner-only actions */}
       {isOwner && (

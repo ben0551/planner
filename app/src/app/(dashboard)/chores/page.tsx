@@ -275,6 +275,8 @@ export default function ChoresPage() {
       (chore.type !== "everyone" || c.user === user.id)
     );
     if (existing) {
+      // only the owner or the person who recorded the completion can undo it
+      if (!isOwner && existing.user !== user.id) return;
       await pb.collection("chore_completions").delete(existing.id);
       setCompletions(prev => prev.filter(c => c.id !== existing.id));
     } else {

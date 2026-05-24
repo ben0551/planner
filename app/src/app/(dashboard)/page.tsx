@@ -156,7 +156,8 @@ export default function DashboardPage() {
   const pb = getClient();
 
   const [todayChores, setTodayChores] = useState<Chore[]>([]);
-  const [completions, setCompletions] = useState<ChoreCompletion[]>([]);
+  const [todayDone, setTodayDone] = useState(0);
+  const [todayTotal, setTodayTotal] = useState(0);
   const [weeklyCompleted, setWeeklyCompleted] = useState(0);
   const [weekPoints, setWeekPoints] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
@@ -219,7 +220,18 @@ export default function DashboardPage() {
       ]);
 
       const custodyWeek = (membership?.expand?.household?.custody_week ?? "") as "odd" | "even" | "";
-      const due = chores.filter((c) => isDueOnDate(c, today, custodyWeek, startOnSun)).slice(0, 5);
+
+      // Use all-household completions to determine what's done today
+      const todayAllCompletions = allCompletions.filter(
+        (c) => c.date === today || c.date.startsWith(today + " ") || c.date.startsWith(today + "T"),
+      );
+      function isDoneForUser(chore: Chore): boolean {
+        // "everyone" chore: only done for the current user if they completed it
+        if (chore.type === "everyone") return todayAllCompletions.some(c => c.chore === chore.id && c.user === user!.id);
+        return todayAllCompletions.some(c => c.chore === chore.id);
+      }
+      const allDueToday = chores.filter((c) => isDueOnDate(c, today, custodyWeek, startOnSun));
+      const due = allDueToday.filter((c) => !isDoneForUser(c)).slice(0, 5);
 
       const wPts = myWeekCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
       const allPts = allMyCompletions.reduce((s, c) => s + (c.points ?? 0), 0);
@@ -239,7 +251,8 @@ export default function DashboardPage() {
       }).filter(m => m.streak > 0).sort((a, b) => b.streak - a.streak || b.weekPts - a.weekPts);
 
       setTodayChores(due);
-      setCompletions(myWeekCompletions);
+      setTodayDone(allDueToday.filter(isDoneForUser).length);
+      setTodayTotal(allDueToday.length);
       setWeeklyCompleted(myWeekCompletions.length);
       setWeekPoints(wPts);
       setTotalPoints(allPts);
@@ -275,11 +288,7 @@ export default function DashboardPage() {
     if (dayEvts.length > 0 || dayTasks.length > 0) agendaDays.push({ d, ds, events: dayEvts, tasks: dayTasks });
   }
 
-  const todayCompletions = completions.filter(
-    (c) => c.date === _today || c.date.startsWith(_today + " ") || c.date.startsWith(_today + "T"),
-  );
-  const completedChoreIds = new Set(todayCompletions.map((c) => c.chore));
-  const todayDoneCount = todayChores.filter((c) => completedChoreIds.has(c.id)).length;
+  // todayChores only contains incomplete chores; todayDone/todayTotal track the full picture
 
   return (
     <div className="flex flex-col gap-4">
@@ -291,7 +300,7 @@ export default function DashboardPage() {
 
       {/* Stats row */}
       <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-3 flex items-center gap-4">
-        <ProgressRing done={todayDoneCount} total={todayChores.length} />
+        <ProgressRing done={todayDone} total={todayTotal} />
         <div className="flex-1 flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
             <CheckCircle2 className="h-4 w-4" />
@@ -438,30 +447,23 @@ export default function DashboardPage() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4 pb-3">
               {todayChores.map((chore) => {
-                const done = completedChoreIds.has(chore.id);
                 const colors = choreCardColor(chore.id);
                 return (
                   <Link
                     key={chore.id}
                     href="/chores"
                     className={cn(
-                      "relative rounded-2xl border p-3 flex flex-col items-center gap-1.5 text-center transition-opacity",
+                      "rounded-2xl border p-3 flex flex-col items-center gap-1.5 text-center",
                       colors,
-                      done && "opacity-60"
                     )}
                   >
                     <span className="text-3xl leading-none">{choreEmoji(chore.title)}</span>
-                    <p className={cn("text-xs font-medium leading-tight", done && "line-through")}>{chore.title}</p>
+                    <p className="text-xs font-medium leading-tight">{chore.title}</p>
                     {chore.points > 0 && (
                       <span className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold">
                         <Star className="h-3 w-3 fill-amber-400 stroke-amber-400" />
                         {chore.points} pts
                       </span>
-                    )}
-                    {done && (
-                      <div className="absolute top-2 right-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      </div>
                     )}
                   </Link>
                 );
