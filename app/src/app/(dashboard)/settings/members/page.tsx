@@ -289,13 +289,13 @@ export default function MembersPage() {
       <div className="flex flex-col gap-3">
         {members.map((member) => {
           const isExpanded = expanded === member.membershipId;
-          const isChild = member.hasPin;
+          const isChild = member.email.endsWith("@planner.local");
           return (
             <div key={member.membershipId} className="rounded-2xl border bg-card overflow-hidden">
               {/* Member row */}
               <div
-                className={cn("flex items-center gap-3 p-3", isOwner && isChild && "cursor-pointer hover:bg-muted/30 transition-colors")}
-                onClick={() => isOwner && isChild && setExpanded(isExpanded ? null : member.membershipId)}
+                className={cn("flex items-center gap-3 p-3", isOwner && "cursor-pointer hover:bg-muted/30 transition-colors")}
+                onClick={() => isOwner && setExpanded(isExpanded ? null : member.membershipId)}
               >
                 <Avatar className="h-9 w-9">
                   <AvatarFallback className="text-xs">{initials(member.name)}</AvatarFallback>
@@ -309,7 +309,7 @@ export default function MembersPage() {
                 <Badge variant={member.role === "owner" ? "default" : "secondary"}>
                   {member.role}
                 </Badge>
-                {isOwner && isChild && (
+                {isOwner && (
                   isExpanded
                     ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
                     : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -317,7 +317,7 @@ export default function MembersPage() {
               </div>
 
               {/* Permission editor */}
-              {isExpanded && isChild && (
+              {isExpanded && (
                 <div className="border-t px-4 py-3 flex flex-col gap-3">
                   {/* PIN reset */}
                   <div className="flex flex-col gap-2">
@@ -357,57 +357,61 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  {/* Theme picker */}
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-black text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                      <Palette className="h-3 w-3" /> Theme
-                      {themeSaving === member.membershipId && <span className="text-[10px] font-normal">Saving…</span>}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {THEMES.map((t) => {
-                        const active = (member.theme ?? "violet") === t.name;
-                        return (
-                          <button
-                            key={t.name}
-                            onClick={() => saveTheme(member, t.name)}
-                            title={t.label}
-                            className={cn(
-                              "w-8 h-8 rounded-full transition-all",
-                              active ? "ring-2 ring-offset-2 ring-foreground scale-110" : "opacity-70 hover:opacity-100"
-                            )}
-                            style={{ background: t.gradient }}
-                          />
-                        );
-                      })}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      The selected theme changes the app colours when this child is logged in.
-                    </p>
-                  </div>
-
-                  <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Page access</p>
-                  <div className="flex flex-col gap-2.5">
-                    {PAGES.map((page) => (
-                      <div key={page.key} className="flex items-center gap-3">
-                        <span className="text-base w-6 text-center shrink-0">{page.emoji}</span>
-                        <span className="text-sm font-medium w-28 shrink-0">{page.label}</span>
-                        <div className="flex-1">
-                          <PermissionToggle
-                            value={member.permissions[page.key]}
-                            onChange={(v) => updateLocalPermission(member.membershipId, page.key, v)}
-                          />
+                  {isChild && (
+                    <>
+                      {/* Theme picker */}
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs font-black text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                          <Palette className="h-3 w-3" /> Theme
+                          {themeSaving === member.membershipId && <span className="text-[10px] font-normal">Saving…</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {THEMES.map((t) => {
+                            const active = (member.theme ?? "violet") === t.name;
+                            return (
+                              <button
+                                key={t.name}
+                                onClick={() => saveTheme(member, t.name)}
+                                title={t.label}
+                                className={cn(
+                                  "w-8 h-8 rounded-full transition-all",
+                                  active ? "ring-2 ring-offset-2 ring-foreground scale-110" : "opacity-70 hover:opacity-100"
+                                )}
+                                style={{ background: t.gradient }}
+                              />
+                            );
+                          })}
                         </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          The selected theme changes the app colours when this child is logged in.
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                  <Button
-                    size="sm"
-                    className="self-end rounded-xl"
-                    disabled={saving === member.membershipId}
-                    onClick={() => savePermissions(member)}
-                  >
-                    {saving === member.membershipId ? "Saving…" : "Save"}
-                  </Button>
+
+                      <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Page access</p>
+                      <div className="flex flex-col gap-2.5">
+                        {PAGES.map((page) => (
+                          <div key={page.key} className="flex items-center gap-3">
+                            <span className="text-base w-6 text-center shrink-0">{page.emoji}</span>
+                            <span className="text-sm font-medium w-28 shrink-0">{page.label}</span>
+                            <div className="flex-1">
+                              <PermissionToggle
+                                value={member.permissions[page.key]}
+                                onChange={(v) => updateLocalPermission(member.membershipId, page.key, v)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        size="sm"
+                        className="self-end rounded-xl"
+                        disabled={saving === member.membershipId}
+                        onClick={() => savePermissions(member)}
+                      >
+                        {saving === member.membershipId ? "Saving…" : "Save"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

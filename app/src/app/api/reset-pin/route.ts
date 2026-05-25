@@ -14,16 +14,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
-  // Update child's PocketBase password
-  const newPassword = `planner-${householdId}-${newPin}`;
-  const updateRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: token },
-    body: JSON.stringify({ password: newPassword, passwordConfirm: newPassword }),
+  // For child accounts (synthetic @planner.local email), keep the password in sync with the PIN
+  const userRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+    headers: { Authorization: token },
   });
-  if (!updateRes.ok) {
-    const err = await updateRes.json().catch(() => ({}));
-    return NextResponse.json({ error: (err as any).message ?? "Failed to update password." }, { status: 400 });
+  if (userRes.ok) {
+    const user = await userRes.json();
+    if ((user.email as string)?.endsWith("@planner.local")) {
+      const newPassword = `planner-${householdId}-${newPin}`;
+      const updateRes = await fetch(`${PB_URL}/api/collections/users/records/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: token },
+        body: JSON.stringify({ password: newPassword, passwordConfirm: newPassword }),
+      });
+      if (!updateRes.ok) {
+        const err = await updateRes.json().catch(() => ({}));
+        return NextResponse.json({ error: (err as any).message ?? "Failed to update password." }, { status: 400 });
+      }
+    }
   }
 
   // Update membership pin field

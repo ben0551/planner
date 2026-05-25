@@ -27,9 +27,6 @@ function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function childPassword(householdId: string, pin: string) {
-  return `planner-${householdId}-${pin}`;
-}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -78,13 +75,17 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await getClient().collection("users").authWithPassword(
-        selected.email,
-        childPassword(household.id, pin)
-      );
+      const res = await fetch("/api/pin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId: selected.membershipId, pin, householdId: household.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Incorrect PIN.");
+      getClient().authStore.save(data.token, data.record);
       router.push("/");
-    } catch {
-      setError("Incorrect PIN. Try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Incorrect PIN. Try again.");
       setPin("");
     } finally {
       setLoading(false);

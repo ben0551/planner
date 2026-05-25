@@ -4,6 +4,17 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getClient, type CachedMember } from "@/lib/pocketbase";
+
+async function pinLogin(membershipId: string, pin: string, householdId: string) {
+  const res = await fetch("/api/pin-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ membershipId, pin, householdId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Incorrect PIN.");
+  getClient().authStore.save(data.token, data.record);
+}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,9 +24,6 @@ function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function childPassword(householdId: string, pin: string) {
-  return `planner-${householdId}-${pin}`;
-}
 
 export default function SlugPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -52,13 +60,10 @@ export default function SlugPage() {
     setError("");
     setLoading(true);
     try {
-      await getClient().collection("users").authWithPassword(
-        selected.email,
-        childPassword(householdId, pin)
-      );
+      await pinLogin(selected.membershipId, pin, householdId);
       router.push("/");
-    } catch {
-      setError("Incorrect PIN. Try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Incorrect PIN. Try again.");
       setPin("");
     } finally {
       setLoading(false);
