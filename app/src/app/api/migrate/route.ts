@@ -6,6 +6,12 @@ export async function POST() {
     const log = await ensureSchema();
     return NextResponse.json({ ok: true, log });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? "Migration failed." }, { status: 500 });
+    // Parse PocketBase error JSON if that's what was thrown
+    let message: string = err.message ?? "Migration failed.";
+    try {
+      const parsed = JSON.parse(message);
+      message = parsed.message ?? message;
+    } catch {}
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

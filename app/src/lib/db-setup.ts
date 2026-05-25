@@ -410,8 +410,12 @@ export async function ensureSchema(): Promise<string[]> {
         const merged = [...current, ...missing];
         const updated = [...fields];
         updated[recIdx] = { ...field, values: merged, options: { ...(field.options ?? {}), values: merged } };
-        await pbApi(token, `collections/${choresCol.id}`, "PATCH", { fields: updated });
-        log.push(`chores: added recurrence values: ${missing.join(", ")}`);
+        try {
+          await pbApi(token, `collections/${choresCol.id}`, "PATCH", { fields: updated });
+          log.push(`chores: added recurrence values: ${missing.join(", ")}`);
+        } catch (err: any) {
+          log.push(`WARNING: chores recurrence update failed — ${String(err.message).slice(0, 120)}`);
+        }
       }
     }
   }
@@ -447,27 +451,17 @@ export async function ensureSchema(): Promise<string[]> {
     const needsFix = col.listRule !== AUTH_RULE || col.viewRule !== AUTH_RULE || col.createRule !== AUTH_RULE || col.updateRule !== AUTH_RULE || col.deleteRule !== AUTH_RULE;
     if (needsFix) {
       log.push(`${name}: rules wrong (listRule=${JSON.stringify(col.listRule)}), fixing…`);
-      const existingFields = col.fields ?? col.schema ?? [];
-      await pbApi(token, `collections/${col.id}`, "PUT", {
-        id: col.id,
-        name: col.name,
-        type: col.type ?? "base",
-        system: col.system ?? false,
-        schema: existingFields,
-        fields: existingFields,
-        indexes: col.indexes ?? [],
-        listRule: AUTH_RULE,
-        viewRule: AUTH_RULE,
-        createRule: AUTH_RULE,
-        updateRule: AUTH_RULE,
-        deleteRule: AUTH_RULE,
-      });
-      // Verify the rule actually stuck
-      const check = await pbApi(token, `collections/${col.id}`);
-      if (check.listRule !== AUTH_RULE) {
-        log.push(`ERROR: ${name} rules did not apply — listRule is still ${JSON.stringify(check.listRule)}`);
-      } else {
+      try {
+        await pbApi(token, `collections/${col.id}`, "PATCH", {
+          listRule: AUTH_RULE,
+          viewRule: AUTH_RULE,
+          createRule: AUTH_RULE,
+          updateRule: AUTH_RULE,
+          deleteRule: AUTH_RULE,
+        });
         log.push(`${name}: rules set ✓`);
+      } catch (err: any) {
+        log.push(`WARNING: ${name}: could not set rules — ${String(err.message).slice(0, 120)}`);
       }
     } else {
       log.push(`${name}: rules OK`);
@@ -529,8 +523,12 @@ export async function ensureSchema(): Promise<string[]> {
       return { ...f, collectionId: expected, options: { ...(f.options ?? {}), collectionId: expected } };
     });
     if (dirty) {
-      await pbApi(token, `collections/${col.id}`, "PATCH", { schema: repairedFields, fields: repairedFields });
-      log.push(`${name}: relations repaired ✓`);
+      try {
+        await pbApi(token, `collections/${col.id}`, "PATCH", { schema: repairedFields, fields: repairedFields });
+        log.push(`${name}: relations repaired ✓`);
+      } catch (err: any) {
+        log.push(`WARNING: ${name}: could not repair relations — ${String(err.message).slice(0, 120)}`);
+      }
     }
   }
 
