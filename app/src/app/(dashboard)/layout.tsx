@@ -9,7 +9,7 @@ import { randomUUID } from "@/lib/utils";
 import { makeSlug } from "@/lib/db-setup";
 import { Nav } from "@/components/nav";
 import { PwaInit } from "@/components/pwa";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -148,12 +148,8 @@ function MultiLandingPage() {
       </div>
 
       <div className="w-full max-w-xs flex flex-col gap-3">
-        <Button className="w-full rounded-xl" asChild>
-          <Link href="/login">Sign in</Link>
-        </Button>
-        <Button variant="outline" className="w-full rounded-xl" asChild>
-          <Link href="/register">Create a household</Link>
-        </Button>
+        <Link href="/login" className={buttonVariants({ className: "w-full rounded-xl justify-center" })}>Sign in</Link>
+        <Link href="/register" className={buttonVariants({ variant: "outline", className: "w-full rounded-xl justify-center" })}>Create a household</Link>
 
         <div className="relative my-1">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
