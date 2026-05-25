@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getClient } from "@/lib/pocketbase";
 import { randomUUID } from "@/lib/utils";
+import { makeSlug } from "@/lib/db-setup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,9 +80,11 @@ function RegisterForm() {
         });
       } else {
         // Create new household
+        const hhName = householdName || `${name}'s Home`;
         const household = await pb.collection("households").create({
-          name: householdName || `${name}'s Home`,
+          name: hhName,
           invite_token: randomUUID(),
+          slug: makeSlug(hhName),
           status: requireApproval ? "pending" : "active",
         });
         await pb.collection("memberships").create({

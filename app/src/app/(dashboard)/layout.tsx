@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/context/auth";
 import { getClient } from "@/lib/pocketbase";
 import { randomUUID } from "@/lib/utils";
+import { makeSlug } from "@/lib/db-setup";
 import { Nav } from "@/components/nav";
 import { PwaInit } from "@/components/pwa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, setupRequired, householdStatus, logout, refreshMembership } = useAuth();
+  const { user, loading, setupRequired, householdStatus, householdMode, logout, refreshMembership } = useAuth();
   const router = useRouter();
 
   const [householdName, setHouseholdName] = useState("");
@@ -19,10 +21,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [createError, setCreateError] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && householdMode === "single") {
       router.replace("/login");
     }
-  }, [user, loading, router]);
+  }, [user, loading, householdMode, router]);
 
   async function createHousehold() {
     if (!user) return;
@@ -30,9 +32,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setCreateError("");
     try {
       const pb = getClient();
+      const hhName = householdName.trim() || `${(user.name as string).split(" ")[0]}'s Home`;
       const household = await pb.collection("households").create({
-        name: householdName.trim() || `${(user.name as string).split(" ")[0]}'s Home`,
+        name: hhName,
         invite_token: randomUUID(),
+        slug: makeSlug(hhName),
       });
       await pb.collection("memberships").create({
         user: user.id,
@@ -53,6 +57,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <span className="text-muted-foreground text-sm">Loading…</span>
       </div>
     );
+  }
+
+  if (!user && householdMode === "multi") {
+    return <MultiLandingPage />;
   }
 
   if (!user) return null;
@@ -123,6 +131,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="flex-1 min-w-0 px-4 py-6 pb-24 md:pb-8 md:px-8 md:overflow-y-auto">
         {children}
       </main>
+    </div>
+  );
+}
+
+function MultiLandingPage() {
+  const router = useRouter();
+  const [slugInput, setSlugInput] = useState("");
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-muted/30 px-4 gap-10">
+      <div className="text-center">
+        <p className="text-4xl mb-2">✨</p>
+        <h1 className="text-3xl font-black tracking-tight">Planner</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Private household planning for your family.</p>
+      </div>
+
+      <div className="w-full max-w-xs flex flex-col gap-3">
+        <Button className="w-full rounded-xl" asChild>
+          <Link href="/login">Sign in</Link>
+        </Button>
+        <Button variant="outline" className="w-full rounded-xl" asChild>
+          <Link href="/register">Create a household</Link>
+        </Button>
+
+        <div className="relative my-1">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+          <div className="relative flex justify-center"><span className="bg-muted/30 px-2 text-xs text-muted-foreground">I&apos;m a kid</span></div>
+        </div>
+
+        <form
+          onSubmit={(e) => { e.preventDefault(); const s = slugInput.trim(); if (s) router.push(`/${s}`); }}
+          className="flex gap-2"
+        >
+          <Input
+            placeholder="Family URL (e.g. fischer9x2)"
+            value={slugInput}
+            onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+            className="rounded-xl flex-1 text-sm"
+          />
+          <Button type="submit" variant="outline" className="rounded-xl shrink-0" disabled={!slugInput.trim()}>
+            Go
+          </Button>
+        </form>
+        <p className="text-xs text-muted-foreground text-center">Ask a parent for your family URL.</p>
+      </div>
     </div>
   );
 }

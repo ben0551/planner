@@ -12,6 +12,7 @@ interface AuthContextValue {
   loading: boolean;
   setupRequired: boolean;
   isAdmin: boolean;
+  householdMode: "single" | "multi";
   householdStatus: string;
   logout: () => void;
   refreshMembership: () => void;
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   setupRequired: false,
   isAdmin: false,
+  householdMode: "single",
   householdStatus: "active",
   logout: () => {},
   refreshMembership: () => {},
@@ -51,6 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [setupRequired, setSetupRequired] = useState(false);
   const [membershipTick, setMembershipTick] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [householdMode, setHouseholdMode] = useState<"single" | "multi">("single");
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((d) => setHouseholdMode(d.mode === "multi" ? "multi" : "single"))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsub = pb.authStore.onChange((_, record) => {
@@ -147,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         setupRequired,
         isAdmin,
+        householdMode,
         householdStatus,
         logout,
         refreshMembership,

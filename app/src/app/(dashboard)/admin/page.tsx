@@ -55,7 +55,7 @@ function ToggleRow({
 }
 
 export default function AdminPage() {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, householdMode } = useAuth();
   const router = useRouter();
   const pb = getClient();
 
@@ -111,6 +111,18 @@ export default function AdminPage() {
   }
 
   if (loading || !isAdmin) return null;
+
+  if (householdMode === "single") {
+    return (
+      <div className="max-w-2xl mx-auto flex flex-col gap-4 pt-8 text-center">
+        <p className="text-4xl">🔒</p>
+        <h1 className="text-xl font-bold">Admin — not applicable</h1>
+        <p className="text-sm text-muted-foreground">
+          Multi-household admin controls (signups, approval) are only available when <code className="bg-muted px-1 py-0.5 rounded text-xs">HOUSEHOLD_MODE=multi</code>.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-8">

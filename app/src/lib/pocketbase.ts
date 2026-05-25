@@ -48,6 +48,7 @@ export interface Household {
   id: string;
   name: string;
   invite_token: string;
+  slug?: string;
   custody_week?: "odd" | "even" | "";
   week_start?: "mon" | "sun";
   kids_can_check_shopping?: boolean;

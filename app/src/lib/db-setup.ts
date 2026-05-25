@@ -2,6 +2,25 @@ import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
 
 const PB_USERS_ID = "_pb_users_auth_";
 
+export function makeSlug(householdName: string): string {
+  const parts = householdName.trim().toLowerCase().split(/\s+/);
+  const base = (parts[0] === "the" && parts[1] ? parts[1] : parts[0])
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 10) || "family";
+  const rand = Math.random().toString(36).slice(2, 5);
+  return base + rand;
+}
+
+async function generateUniqueSlug(householdName: string, token: string): Promise<string> {
+  for (let i = 0; i < 8; i++) {
+    const slug = makeSlug(householdName);
+    const res = await fetch(`${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`slug="${slug}"`)}&perPage=1&skipTotal=1`, { headers: { Authorization: token } });
+    const data = await res.json();
+    if (!data.items?.length) return slug;
+  }
+  return "family" + Math.random().toString(36).slice(2, 7);
+}
+
 async function pbApi(token: string, path: string, method = "GET", body?: object) {
   const res = await fetch(`${PB_URL}/api/${path}`, {
     method,
@@ -92,6 +111,7 @@ export async function ensureSchema(): Promise<string[]> {
     fields: [
       { name: "name", type: "text", required: true },
       { name: "invite_token", type: "text", required: true },
+      { name: "slug", type: "text" },
       { name: "custody_week", type: "text" },
       { name: "week_start", type: "text" },
       { name: "kids_can_check_shopping", type: "bool" },
@@ -313,6 +333,7 @@ export async function ensureSchema(): Promise<string[]> {
   // ── add fields missing from existing collections (upgrades) ──
 
   await addMissingFields("households", [
+    { name: "slug", type: "text" },
     { name: "custody_week", type: "text" },
     { name: "week_start", type: "text" },
     { name: "kids_can_check_shopping", type: "bool" },
@@ -527,6 +548,16 @@ export async function ensureSchema(): Promise<string[]> {
       }
     }
   }
+
+  // ── generate slugs for households that don't have one ──
+  try {
+    const noSlug = await pbApi(token, `collections/households/records?filter=${encodeURIComponent('slug=""')}&perPage=200&skipTotal=1`);
+    for (const hh of noSlug.items ?? []) {
+      const slug = await generateUniqueSlug(hh.name, token);
+      await pbApi(token, `collections/households/records/${hh.id}`, "PATCH", { slug });
+      log.push(`households: generated slug "${slug}" for "${hh.name}"`);
+    }
+  } catch { /* skip — field may not exist yet on very first run */ }
 
   if (log.length === 0) log.push("All schema up to date.");
   return log;

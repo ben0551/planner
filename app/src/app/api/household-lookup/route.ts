@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPbAdminToken, PB_URL } from "../_pb-admin";
 
+const isMulti = () => process.env.HOUSEHOLD_MODE === "multi";
+
 export async function GET(req: NextRequest) {
   let token: string;
   try {
@@ -9,10 +11,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
+  const slug = req.nextUrl.searchParams.get("slug")?.trim();
   const name = req.nextUrl.searchParams.get("name")?.trim();
-  const url = name && name.length >= 2
-    ? `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`name~"${name}"`)}&perPage=5`
-    : `${PB_URL}/api/collections/households/records?perPage=10`;
+
+  // In multi mode, a slug is required — prevents enumeration of all households
+  if (isMulti() && !slug) {
+    return NextResponse.json({ households: [] });
+  }
+
+  let url: string;
+  if (slug) {
+    url = `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`slug="${slug}"`)}&perPage=1`;
+  } else if (name && name.length >= 2) {
+    url = `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`name~"${name}"`)}&perPage=5`;
+  } else {
+    url = `${PB_URL}/api/collections/households/records?perPage=10`;
+  }
 
   const householdsRes = await fetch(url, { headers: { Authorization: token } });
   if (!householdsRes.ok) {
@@ -36,7 +50,6 @@ export async function GET(req: NextRequest) {
       const pinMembers = (ms ?? []).filter((m: any) => m.pin && String(m.pin).length === 4);
       if (pinMembers.length === 0) return { id: h.id, name: h.name as string, members: [] };
 
-      // Fetch users directly with admin token — avoids viewRule restrictions on expand
       const userIds = pinMembers.map((m: any) => m.user).filter(Boolean);
       const usersFilter = userIds.map((id: string) => `id="${id}"`).join("||");
       const usersRes = await fetch(

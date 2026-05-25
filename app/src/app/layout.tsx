@@ -13,6 +13,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "✨ Planner",
   description: "Your household planner",
+  robots: { index: false, follow: false },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

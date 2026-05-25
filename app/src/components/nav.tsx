@@ -57,7 +57,7 @@ const PAGE_PERMISSION_KEY: Record<string, keyof Permissions | undefined> = {
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, membership, isAdmin, logout } = useAuth();
+  const { user, membership, isAdmin, logout, householdMode } = useAuth();
   const theme = getTheme(membership?.theme);
 
   const [liveGradient, setLiveGradient] = useState(theme.gradient);
@@ -148,6 +148,11 @@ export function Nav() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white truncate">{user?.name as string}</p>
               <p className="text-[11px] text-violet-200 truncate">{membership?.expand?.household?.name}</p>
+              {householdMode === "multi" && membership?.role === "owner" && membership?.expand?.household?.slug && (
+                <p className="text-[10px] text-violet-300/80 truncate font-mono">
+                  /{membership.expand.household.slug}
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -176,6 +181,9 @@ export function Nav() {
             <div className="px-2 py-1.5 text-sm">
               <p className="font-bold">{user?.name as string}</p>
               <p className="text-muted-foreground text-xs truncate">{user?.email as string}</p>
+              {householdMode === "multi" && membership?.role === "owner" && membership?.expand?.household?.slug && (
+                <p className="text-muted-foreground text-xs font-mono">/{membership.expand.household.slug}</p>
+              )}
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/settings")}>Settings</DropdownMenuItem>

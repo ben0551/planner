@@ -34,6 +34,7 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT}
+      - HOUSEHOLD_MODE=${HOUSEHOLD_MODE:-single}
     depends_on:
       pocketbase:
         condition: service_healthy
