@@ -61,7 +61,6 @@ export default function AdminPage() {
 
   const [allowSignups, setAllowSignups] = useState(true);
   const [requireApproval, setRequireApproval] = useState(false);
-  const [serverMode, setServerMode] = useState<"single" | "multi" | null>(null);
   const [pending, setPending] = useState<PendingHousehold[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(true);
@@ -81,7 +80,6 @@ export default function AdminPage() {
       .then((d) => {
         setAllowSignups(d.allow_signups !== false);
         setRequireApproval(d.require_approval === true);
-        setServerMode(d.household_mode === "multi" ? "multi" : "single");
       })
       .finally(() => setSettingsLoading(false));
 
@@ -112,19 +110,7 @@ export default function AdminPage() {
     setActionId(null);
   }
 
-  if (loading || !isAdmin || serverMode === null) return null;
-
-  if (serverMode === "single") {
-    return (
-      <div className="max-w-2xl mx-auto flex flex-col gap-4 pt-8 text-center">
-        <p className="text-4xl">🔒</p>
-        <h1 className="text-xl font-bold">Admin — not applicable</h1>
-        <p className="text-sm text-muted-foreground">
-          Multi-household admin controls (signups, approval) are only available when <code className="bg-muted px-1 py-0.5 rounded text-xs">HOUSEHOLD_MODE=multi</code>.
-        </p>
-      </div>
-    );
-  }
+  if (loading || !isAdmin) return null;
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-8">
