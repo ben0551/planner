@@ -55,7 +55,7 @@ function ToggleRow({
 }
 
 export default function AdminPage() {
-  const { isAdmin, loading, householdMode } = useAuth();
+  const { isAdmin, loading, householdMode, householdModeLoading } = useAuth();
   const router = useRouter();
   const pb = getClient();
 
@@ -110,7 +110,7 @@ export default function AdminPage() {
     setActionId(null);
   }
 
-  if (loading || !isAdmin) return null;
+  if (loading || householdModeLoading || !isAdmin) return null;
 
   if (householdMode === "single") {
     return (
