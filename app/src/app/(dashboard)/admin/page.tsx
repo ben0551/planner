@@ -55,12 +55,13 @@ function ToggleRow({
 }
 
 export default function AdminPage() {
-  const { isAdmin, loading, householdMode, householdModeLoading } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const router = useRouter();
   const pb = getClient();
 
   const [allowSignups, setAllowSignups] = useState(true);
   const [requireApproval, setRequireApproval] = useState(false);
+  const [serverMode, setServerMode] = useState<"single" | "multi" | null>(null);
   const [pending, setPending] = useState<PendingHousehold[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [pendingLoading, setPendingLoading] = useState(true);
@@ -80,6 +81,7 @@ export default function AdminPage() {
       .then((d) => {
         setAllowSignups(d.allow_signups !== false);
         setRequireApproval(d.require_approval === true);
+        setServerMode(d.household_mode === "multi" ? "multi" : "single");
       })
       .finally(() => setSettingsLoading(false));
 
@@ -110,9 +112,9 @@ export default function AdminPage() {
     setActionId(null);
   }
 
-  if (loading || householdModeLoading || !isAdmin) return null;
+  if (loading || !isAdmin || serverMode === null) return null;
 
-  if (householdMode === "single") {
+  if (serverMode === "single") {
     return (
       <div className="max-w-2xl mx-auto flex flex-col gap-4 pt-8 text-center">
         <p className="text-4xl">🔒</p>

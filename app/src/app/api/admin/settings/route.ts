@@ -16,6 +16,7 @@ export async function GET() {
     return NextResponse.json({
       allow_signups: settings.allow_signups !== false,
       require_approval: settings.require_approval === true,
+      household_mode: process.env.HOUSEHOLD_MODE === "multi" ? "multi" : "single",
     });
   } catch {
     return NextResponse.json({ allow_signups: true, require_approval: false });
