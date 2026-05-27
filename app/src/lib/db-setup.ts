@@ -357,6 +357,9 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "balance", type: "number" },
     { name: "points_per_dollar", type: "number" },
     { name: "converted_points", type: "number" },
+    { name: "custom_gradient", type: "text" },
+    { name: "custom_bg_image", type: "file", options: { maxSelect: 1, mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"] } },
+    { name: "custom_primary", type: "text" },
   ]);
   await addMissingFields("chores", [
     { name: "type", ...sel(["single", "everyone", "shared"]) },

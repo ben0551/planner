@@ -63,17 +63,30 @@ export function Nav() {
 
   const [liveGradient, setLiveGradient] = useState(theme.gradient);
   useEffect(() => {
-    if (theme.name !== "dynamic") { setLiveGradient(theme.gradient); return; }
-    const tick = () => {
-      setLiveGradient(getDynamicGradient());
-      const p = getDynamicPrimary();
-      document.documentElement.style.setProperty("--primary", p);
-      document.documentElement.style.setProperty("--ring", p);
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
-  }, [theme.name, theme.gradient]);
+    if (theme.name === "dynamic") {
+      const tick = () => {
+        setLiveGradient(getDynamicGradient());
+        const p = getDynamicPrimary();
+        document.documentElement.style.setProperty("--primary", p);
+        document.documentElement.style.setProperty("--ring", p);
+      };
+      tick();
+      const id = setInterval(tick, 60_000);
+      return () => clearInterval(id);
+    }
+    if (theme.name === "custom") {
+      const bg = membership?.custom_bg_image
+        ? `linear-gradient(rgba(0,0,0,0.4),rgba(0,0,0,0.4)), url("/pb/api/files/memberships/${membership.id}/${membership.custom_bg_image}") center / cover no-repeat`
+        : membership?.custom_gradient || theme.gradient;
+      setLiveGradient(bg);
+      if (membership?.custom_primary) {
+        document.documentElement.style.setProperty("--primary", membership.custom_primary);
+        document.documentElement.style.setProperty("--ring", membership.custom_primary);
+      }
+      return;
+    }
+    setLiveGradient(theme.gradient);
+  }, [theme.name, theme.gradient, membership?.custom_bg_image, membership?.custom_gradient, membership?.custom_primary, membership?.id]);
 
   function canSee(href: string): boolean {
     const key = PAGE_PERMISSION_KEY[href];

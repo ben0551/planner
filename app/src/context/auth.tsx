@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSetupRequired(false);
       const typed = m as unknown as Membership;
       setMembership(typed);
-      applyTheme(typed.theme);
+      applyTheme(typed.theme, typed.custom_primary);
 
       // Cache household + members list so the family login picker works offline
       const householdId = typed.household;

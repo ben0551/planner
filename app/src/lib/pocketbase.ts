@@ -72,6 +72,10 @@ export interface Membership {
   balance?: number;
   points_per_dollar?: number;
   converted_points?: number;
+  // custom theme fields
+  custom_gradient?: string;  // CSS background value (gradient or image CSS)
+  custom_bg_image?: string;  // PocketBase filename of uploaded background image
+  custom_primary?: string;   // CSS color value for --primary / --ring
   expand?: { household?: Household; user?: User };
 }
 

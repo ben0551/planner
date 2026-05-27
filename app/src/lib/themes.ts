@@ -144,6 +144,14 @@ export const THEMES: Theme[] = [
     primary: getDynamicPrimary(),
     primaryFg: "oklch(1 0 0)",
   },
+  {
+    name: "custom",
+    label: "Custom",
+    emoji: "🎨",
+    gradient: "linear-gradient(175deg, #7c3aed 0%, #4f46e5 100%)", // placeholder; real value comes from membership
+    primary: "oklch(0.56 0.24 280)",
+    primaryFg: "oklch(1 0 0)",
+  },
   // ── Illustrated kid themes ────────────────────────────────────────
   {
     name: "space",
@@ -193,10 +201,17 @@ export function getTheme(name: string | undefined): Theme {
   return THEMES.find((t) => t.name === name) ?? DEFAULT_THEME;
 }
 
-export function applyTheme(name: string | undefined) {
+export function applyTheme(name: string | undefined, customPrimary?: string) {
   const theme = getTheme(name);
   const root = document.documentElement;
-  const primary = name === "dynamic" ? getDynamicPrimary() : theme.primary;
+  let primary: string;
+  if (name === "custom" && customPrimary) {
+    primary = customPrimary;
+  } else if (name === "dynamic") {
+    primary = getDynamicPrimary();
+  } else {
+    primary = theme.primary;
+  }
   root.style.setProperty("--primary", primary);
   root.style.setProperty("--primary-foreground", theme.primaryFg);
   root.style.setProperty("--ring", primary);
