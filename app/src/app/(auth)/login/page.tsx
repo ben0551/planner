@@ -45,6 +45,10 @@ export default function LoginPage() {
   const [kidLoading, setKidLoading] = useState(false);
 
   useEffect(() => {
+    // Wait until we know the household mode before reading localStorage.
+    // Without this, the family picker can flash briefly before the config loads.
+    if (householdModeLoading) return;
+    if (householdMode === "multi") return;
     try {
       const h = JSON.parse(localStorage.getItem("planner_household") ?? "null") as CachedHousehold | null;
       const m = JSON.parse(localStorage.getItem("planner_members") ?? "[]") as CachedMember[];
@@ -54,7 +58,7 @@ export default function LoginPage() {
         setMode("family");
       }
     } catch {}
-  }, []);
+  }, [householdModeLoading, householdMode]);
 
   async function handleEmailLogin() {
     setError("");
