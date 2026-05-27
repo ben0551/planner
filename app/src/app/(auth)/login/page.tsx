@@ -32,7 +32,6 @@ export default function LoginPage() {
   const router = useRouter();
   const { householdMode } = useAuth();
   const [mode, setMode] = useState<"family" | "email" | "lookup">("email");
-  const [slugInput, setSlugInput] = useState("");
   const [household, setHousehold] = useState<CachedHousehold | null>(null);
   const [members, setMembers] = useState<CachedMember[]>([]);
   const [selected, setSelected] = useState<CachedMember | null>(null);
@@ -290,26 +289,7 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
-            {householdMode === "multi" ? (
-              <form
-                onSubmit={(e) => { e.preventDefault(); const s = slugInput.trim(); if (s) router.push(`/${s}`); }}
-                className="flex gap-2"
-              >
-                <input
-                  placeholder="Family URL (e.g. fischer9x2)"
-                  value={slugInput}
-                  onChange={(e) => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
-                  className="flex-1 rounded-xl border border-border px-3 py-2 text-sm bg-background outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  type="submit"
-                  disabled={!slugInput.trim()}
-                  className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-40"
-                >
-                  Go
-                </button>
-              </form>
-            ) : (
+            {householdMode !== "multi" && (
               <button
                 type="button"
                 onClick={kidLogin}
@@ -319,7 +299,7 @@ export default function LoginPage() {
                 {kidLoading ? "Finding family…" : "I'm a kid — find my family"}
               </button>
             )}
-            {household && (
+            {householdMode !== "multi" && household && (
               <button
                 type="button"
                 onClick={() => { setMode("family"); setError(""); }}
