@@ -28,7 +28,7 @@ function initials(name: string) {
 
 export function LoginForm({ isMulti }: { isMulti: boolean }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"family" | "email" | "lookup">("email");
+  const [mode, setMode] = useState<"family" | "email">("email");
   const [household, setHousehold] = useState<CachedHousehold | null>(null);
   const [members, setMembers] = useState<CachedMember[]>([]);
   const [selected, setSelected] = useState<CachedMember | null>(null);
@@ -37,9 +37,6 @@ export function LoginForm({ isMulti }: { isMulti: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const [lookupResults, setLookupResults] = useState<Array<{ id: string; name: string; members: CachedMember[] }>>([]);
-  const [kidLoading, setKidLoading] = useState(false);
 
   useEffect(() => {
     // isMulti is known synchronously from the server — no async fetch needed.
@@ -103,43 +100,7 @@ export function LoginForm({ isMulti }: { isMulti: boolean }) {
     }
   }
 
-  async function kidLogin() {
-    setKidLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/household-lookup");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Lookup failed.");
-      const found: Array<{ id: string; name: string; members: CachedMember[] }> = data.households ?? [];
-      if (found.length === 0) {
-        setError("No kids found. Add a child account in Settings → Members first.");
-        return;
-      }
-      if (found.length === 1) {
-        selectHousehold(found[0]);
-      } else {
-        setLookupResults(found);
-        setMode("lookup");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load family.");
-    } finally {
-      setKidLoading(false);
-    }
-  }
-
-  function selectHousehold(h: { id: string; name: string; members: CachedMember[] }) {
-    setHousehold({ id: h.id, name: h.name });
-    setMembers(h.members);
-    try {
-      localStorage.setItem("planner_household", JSON.stringify({ id: h.id, name: h.name }));
-      localStorage.setItem("planner_members", JSON.stringify(h.members));
-    } catch {}
-    setMode("family");
-    setLookupResults([]);
-  }
-
-  // ── Family picker ─────────────────────────────────────────────────────────
+  // ── Family picker (cached, no network call) ───────────────────────────────
   if (!isMulti && mode === "family" && household) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -217,40 +178,6 @@ export function LoginForm({ isMulti }: { isMulti: boolean }) {
     );
   }
 
-  // ── Household picker (multiple households found) ─────────────────────────
-  if (mode === "lookup") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Which family?</CardTitle>
-            <CardDescription>Tap your household to sign in.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {lookupResults.map((h) => (
-              <button
-                key={h.id}
-                onClick={() => selectHousehold(h)}
-                className="text-left rounded-xl border px-4 py-3 hover:bg-muted/50 transition-colors"
-              >
-                <p className="font-medium">{h.name}</p>
-                <p className="text-xs text-muted-foreground">{h.members.length} kid{h.members.length !== 1 ? "s" : ""}</p>
-              </button>
-            ))}
-          </CardContent>
-          <CardFooter>
-            <button
-              onClick={() => { setMode("email"); setLookupResults([]); }}
-              className="text-sm text-muted-foreground hover:text-foreground w-full text-center"
-            >
-              ← Sign in with email instead
-            </button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
-
   // ── Email login ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -289,16 +216,6 @@ export function LoginForm({ isMulti }: { isMulti: boolean }) {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
-            {!isMulti && (
-              <button
-                type="button"
-                onClick={kidLogin}
-                disabled={kidLoading}
-                className="w-full rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
-              >
-                {kidLoading ? "Finding family…" : "I'm a kid — find my family"}
-              </button>
-            )}
             {!isMulti && household && (
               <button
                 type="button"

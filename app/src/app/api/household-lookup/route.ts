@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPbAdminToken, PB_URL } from "../_pb-admin";
 
-const isMulti = () => process.env.HOUSEHOLD_MODE === "multi";
-
 export async function GET(req: NextRequest) {
+  // Slug is always required — prevents unauthenticated enumeration of all households.
+  const slug = req.nextUrl.searchParams.get("slug")?.trim();
+  if (!slug) {
+    return NextResponse.json({ households: [] });
+  }
+
   let token: string;
   try {
     token = await getPbAdminToken();
@@ -11,22 +15,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
-  const slug = req.nextUrl.searchParams.get("slug")?.trim();
-  const name = req.nextUrl.searchParams.get("name")?.trim();
-
-  // In multi mode, a slug is required — prevents enumeration of all households
-  if (isMulti() && !slug) {
-    return NextResponse.json({ households: [] });
-  }
-
-  let url: string;
-  if (slug) {
-    url = `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`slug="${slug}"`)}&perPage=1`;
-  } else if (name && name.length >= 2) {
-    url = `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`name~"${name}"`)}&perPage=5`;
-  } else {
-    url = `${PB_URL}/api/collections/households/records?perPage=10`;
-  }
+  const url = `${PB_URL}/api/collections/households/records?filter=${encodeURIComponent(`slug="${slug}"`)}&perPage=1`;
 
   const householdsRes = await fetch(url, { headers: { Authorization: token } });
   if (!householdsRes.ok) {
