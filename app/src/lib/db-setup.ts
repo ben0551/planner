@@ -27,8 +27,19 @@ async function pbApi(token: string, path: string, method = "GET", body?: object)
     headers: { "Content-Type": "application/json", Authorization: token },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(JSON.stringify(json));
+  // Read as text first — some PocketBase versions return `null` or an empty body
+  // for certain PATCH operations, which breaks res.json() with a parse error.
+  const text = await res.text();
+  let json: any = null;
+  if (text.trim()) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      // OK response but non-JSON body (e.g. 204 No Content) — treat as success
+    }
+  }
+  if (!res.ok) throw new Error(JSON.stringify(json ?? { status: res.status }));
   return json;
 }
 
