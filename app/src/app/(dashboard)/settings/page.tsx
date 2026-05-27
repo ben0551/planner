@@ -374,11 +374,25 @@ function SettingsContent() {
         <div className="px-4 pt-3 pb-1 border-b">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Household</p>
         </div>
-        <div className="px-4 py-3 flex flex-col gap-1">
+        <div className="px-4 py-3 flex flex-col gap-1.5">
           <p className="text-sm font-semibold">{household?.name}</p>
           <p className="text-xs text-muted-foreground flex items-center gap-2">
             Your role: <Badge variant="secondary">{membership?.role}</Badge>
           </p>
+          {(household as any)?.slug && (
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-muted-foreground">Family URL:</p>
+              <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
+                {typeof window !== "undefined" ? window.location.origin : ""}/{(household as any).slug}
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${(household as any).slug}`)}
+                className="text-xs text-primary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
