@@ -156,7 +156,7 @@ export function Nav() {
               )}
             </div>
           </div>
-          {isAdmin && (
+          {membership?.role === "owner" && (
             <a
               href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
               target="_blank"
@@ -209,7 +209,7 @@ export function Nav() {
               </>
             )}
             <DropdownMenuSeparator />
-            {isAdmin && (
+            {membership?.role === "owner" && (
               <DropdownMenuItem asChild>
                 <a
                   href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
