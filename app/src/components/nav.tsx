@@ -28,6 +28,7 @@ import {
   StickyNote,
   TrendingUp,
   ShieldCheck,
+  Heart,
 } from "lucide-react";
 
 const navItems = [
@@ -155,6 +156,17 @@ export function Nav() {
               )}
             </div>
           </div>
+          {isAdmin && (
+            <a
+              href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-pink-300 hover:text-white hover:bg-white/15 transition-colors font-medium"
+            >
+              <Heart className="h-4 w-4 shrink-0 fill-pink-400 text-pink-400" />
+              Buy me a coffee ☕
+            </a>
+          )}
           <button
             onClick={logout}
             className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-violet-200 hover:text-white hover:bg-white/15 transition-colors w-full text-left font-medium"
@@ -197,6 +209,18 @@ export function Nav() {
               </>
             )}
             <DropdownMenuSeparator />
+            {isAdmin && (
+              <DropdownMenuItem asChild>
+                <a
+                  href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-pink-500 font-medium cursor-pointer"
+                >
+                  ☕ Buy me a coffee
+                </a>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={logout} className="text-destructive font-medium">
               Sign out
             </DropdownMenuItem>

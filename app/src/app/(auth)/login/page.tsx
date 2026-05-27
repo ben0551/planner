@@ -30,7 +30,7 @@ function initials(name: string) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { householdMode } = useAuth();
+  const { householdMode, householdModeLoading } = useAuth();
   const [mode, setMode] = useState<"family" | "email" | "lookup">("email");
   const [household, setHousehold] = useState<CachedHousehold | null>(null);
   const [members, setMembers] = useState<CachedMember[]>([]);
@@ -140,7 +140,7 @@ export default function LoginPage() {
   }
 
   // ── Family picker ─────────────────────────────────────────────────────────
-  if (mode === "family" && household) {
+  if (!householdModeLoading && householdMode !== "multi" && mode === "family" && household) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-full max-w-sm">
