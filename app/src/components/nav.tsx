@@ -210,15 +210,11 @@ export function Nav() {
             )}
             <DropdownMenuSeparator />
             {membership?.role === "owner" && (
-              <DropdownMenuItem asChild>
-                <a
-                  href="https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-pink-500 font-medium cursor-pointer"
-                >
-                  ☕ Buy me a coffee
-                </a>
+              <DropdownMenuItem
+                onClick={() => window.open("https://paypal.me/Fischerbenjamin?locale.x=en_AU&country.x=AU", "_blank", "noopener,noreferrer")}
+                className="text-pink-500 font-medium cursor-pointer"
+              >
+                ☕ Buy me a coffee
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={logout} className="text-destructive font-medium">
