@@ -113,6 +113,14 @@ export const THEMES: Theme[] = [
     primaryFg: "oklch(1 0 0)",
   },
   {
+    name: "coffee",
+    label: "Coffee",
+    emoji: "☕",
+    gradient: "linear-gradient(175deg, #2c1510 0%, #5c2a10 35%, #7b3c1a 65%, #a05a2c 100%)",
+    primary: "oklch(0.50 0.12 50)",
+    primaryFg: "oklch(1 0 0)",
+  },
+  {
     name: "midnight",
     label: "Midnight",
     emoji: "🌙",
