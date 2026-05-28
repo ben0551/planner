@@ -676,12 +676,12 @@ function ShoppingRow({
         <span className="text-xs bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full shrink-0">{addedByName}</span>
       )}
       {!item.checked && canModify && (
-        <button onClick={onStartEdit} className="hidden group-hover:flex text-muted-foreground hover:text-foreground transition-colors shrink-0">
+        <button onClick={onStartEdit} className="flex md:hidden md:group-hover:flex text-muted-foreground hover:text-foreground transition-colors shrink-0">
           <Pencil className="h-3.5 w-3.5" />
         </button>
       )}
       {canModify && (
-        <button onClick={onDelete} className="hidden group-hover:flex text-muted-foreground hover:text-destructive transition-colors shrink-0">
+        <button onClick={onDelete} className="flex md:hidden md:group-hover:flex text-muted-foreground hover:text-destructive transition-colors shrink-0">
           <X className="h-3.5 w-3.5" />
         </button>
       )}
