@@ -16,7 +16,7 @@ export default function ShoppingPage() {
   const pb = getClient();
   const userId = user?.id ?? "";
   const isOwner = membership?.role === "owner";
-  const isKid = !!(membership as any)?.pin && !isOwner;
+  const shoppingPerm = isOwner ? "edit" : (membership?.permissions?.shopping ?? "edit");
   const kidsCanCheck = !!(membership?.expand?.household as any)?.kids_can_check_shopping;
 
   const [items, setItems] = useState<ShoppingItem[]>([]);
@@ -497,8 +497,8 @@ export default function ShoppingPage() {
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{groupKey}</p>
           )}
           {groupItems.map((item) => {
-            const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
-            const canCheck = !isKid || kidsCanCheck;
+            const canEdit = shoppingPerm === "edit";
+            const canCheck = canEdit || kidsCanCheck;
             return (
               <ShoppingRow
                 key={item.id}
@@ -525,8 +525,8 @@ export default function ShoppingPage() {
         <div className="flex flex-col gap-1 opacity-50">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">In basket</p>
           {checked.map((item) => {
-            const canEdit = !isKid || (item.added_by === userId && !item.meal_note);
-            const canCheck = !isKid || kidsCanCheck;
+            const canEdit = shoppingPerm === "edit";
+            const canCheck = canEdit || kidsCanCheck;
             return (
               <ShoppingRow
                 key={item.id}
