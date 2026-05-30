@@ -69,16 +69,20 @@ export async function ensureSchema(): Promise<string[]> {
   const byName: Record<string, any> = {};
   for (const c of allCollections.items ?? []) byName[c.name] = c;
 
+  // Collections that should have authenticated-only access
+  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions", "push_subscriptions", "bookmarks"]);
+
   async function ensureCollection(def: { name: string; fields: any[] }): Promise<string> {
     if (byName[def.name]) return byName[def.name].id as string;
-    const created = await pbApi(token, "collections", "POST", { ...def, type: "base" });
+    const AUTH_RULE_LOCAL = '@request.auth.id != ""';
+    const rules = AUTH_COLS.has(def.name)
+      ? { listRule: AUTH_RULE_LOCAL, viewRule: AUTH_RULE_LOCAL, createRule: AUTH_RULE_LOCAL, updateRule: AUTH_RULE_LOCAL, deleteRule: AUTH_RULE_LOCAL }
+      : {};
+    const created = await pbApi(token, "collections", "POST", { ...def, type: "base", ...rules });
     byName[created.name] = created;
     log.push(`Created collection: ${created.name}`);
     return created.id as string;
   }
-
-  // Collections that should have authenticated-only access
-  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions", "push_subscriptions", "bookmarks"]);
   const AUTH_RULE = '@request.auth.id != ""';
 
   async function addMissingFields(name: string, newFields: any[]) {
