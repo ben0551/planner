@@ -101,7 +101,7 @@ function SettingsContent() {
     hasCredentials?: boolean;
     calendarId?: string;
   } | null>(null);
-  const [gcalCalendars, setGcalCalendars] = useState<{ id: string; summary: string; primary?: boolean }[]>([]);
+  const [gcalCalendars, setGcalCalendars] = useState<{ id: string; summary: string; primary?: boolean; timeZone?: string }[]>([]);
   const [gcalPickerOpen, setGcalPickerOpen] = useState(false);
   const [gcalSaving, setGcalSaving] = useState(false);
   const [gcalMsg, setGcalMsg] = useState("");
@@ -132,12 +132,12 @@ function SettingsContent() {
     }
   }
 
-  async function selectCalendar(calendarId: string) {
+  async function selectCalendar(calendarId: string, calendarTimezone?: string) {
     setGcalSaving(true);
     await fetch("/api/google-calendar/select", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ householdId, calendarId }),
+      body: JSON.stringify({ householdId, calendarId, calendarTimezone }),
     });
     setGcalStatus((s) => ({ ...s, connected: true, calendarId }));
     setGcalPickerOpen(false);
@@ -633,7 +633,7 @@ function SettingsContent() {
                           gcalCalendars.map((cal) => (
                             <button
                               key={cal.id}
-                              onClick={() => selectCalendar(cal.id)}
+                              onClick={() => selectCalendar(cal.id, cal.timeZone)}
                               disabled={gcalSaving}
                               className={cn(
                                 "flex items-center gap-3 rounded-xl border p-3 text-left cursor-pointer transition-colors",

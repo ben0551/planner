@@ -17,6 +17,7 @@ export interface GoogleCalendar {
   id: string;
   summary: string;
   primary?: boolean;
+  timeZone?: string;
 }
 
 export interface GoogleCreds {
@@ -175,6 +176,7 @@ export function toGoogleEvent(ev: {
   end: string;
   all_day: boolean;
   notes?: string;
+  timeZone?: string;
 }): GCalEvent {
   if (ev.all_day) {
     const startDate = ev.start.substring(0, 10);
@@ -188,12 +190,13 @@ export function toGoogleEvent(ev: {
       end: { date: endObj.toISOString().substring(0, 10) },
     };
   }
-  const toIso = (s: string) => s.replace(" ", "T") + (s.length === 19 ? "Z" : "");
+  // Strip any trailing Z/offset — the time is already in local wall-clock, timezone specified separately
+  const toIso = (s: string) => s.replace(" ", "T").substring(0, 19);
   return {
     summary: ev.title,
     description: ev.notes || undefined,
-    start: { dateTime: toIso(ev.start) },
-    end: { dateTime: toIso(ev.end) },
+    start: { dateTime: toIso(ev.start), ...(ev.timeZone ? { timeZone: ev.timeZone } : {}) },
+    end: { dateTime: toIso(ev.end), ...(ev.timeZone ? { timeZone: ev.timeZone } : {}) },
   };
 }
 

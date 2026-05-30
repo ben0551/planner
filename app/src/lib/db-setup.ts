@@ -440,6 +440,7 @@ export async function ensureSchema(): Promise<string[]> {
   await addMissingFields("google_tokens", [
     { name: "google_client_id", type: "text" },
     { name: "google_client_secret", type: "text" },
+    { name: "calendar_timezone", type: "text" },
   ]);
 
   // chores recurrence — add new option values if missing

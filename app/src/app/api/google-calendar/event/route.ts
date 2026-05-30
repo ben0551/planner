@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const creds = await getGoogleCredentials(householdId);
     const accessToken = await getAccessToken(rec.refresh_token, creds);
-    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes });
+    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone: rec.calendar_timezone || undefined });
     const created = await createGoogleEvent(accessToken, rec.calendar_id, gEvent);
 
     if (plannerEventId && created.id) {
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
 
     const creds = await getGoogleCredentials(householdId);
     const accessToken = await getAccessToken(rec.refresh_token, creds);
-    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes });
+    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone: rec.calendar_timezone || undefined });
 
     if (googleEventId) {
       await updateGoogleEvent(accessToken, rec.calendar_id, googleEventId, gEvent);

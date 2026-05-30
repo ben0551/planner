@@ -3,7 +3,7 @@ import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
 
 export async function POST(req: NextRequest) {
   try {
-    const { householdId, calendarId } = await req.json();
+    const { householdId, calendarId, calendarTimezone } = await req.json();
     if (!householdId || !calendarId) {
       return Response.json({ error: "householdId and calendarId required" }, { status: 400 });
     }
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     await fetch(`${PB_URL}/api/collections/google_tokens/records/${recId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: adminToken },
-      body: JSON.stringify({ calendar_id: calendarId, sync_token: "" }),
+      body: JSON.stringify({ calendar_id: calendarId, sync_token: "", ...(calendarTimezone ? { calendar_timezone: calendarTimezone } : {}) }),
     });
 
     return Response.json({ ok: true });
