@@ -119,6 +119,20 @@ export async function ensureSchema(): Promise<string[]> {
     }
   }
 
+  // ── one-time migration: drop broken bookmarks collection so it gets recreated ──
+  // The original bookmarks collection (pbc_486090712) had its schema patched by
+  // the relation-repair loop which corrupted sort/filter on system fields.
+  // Dropping it here lets ensureCollection recreate it clean below.
+  if (byName["bookmarks"]?.id === "pbc_486090712") {
+    try {
+      await pbApi(token, `collections/${byName["bookmarks"].id}`, "DELETE");
+      delete byName["bookmarks"];
+      log.push("bookmarks: dropped broken collection for clean recreation");
+    } catch (err: any) {
+      log.push(`WARNING: could not drop bookmarks — ${String(err.message).slice(0, 120)}`);
+    }
+  }
+
   // ── create missing collections (order matters for relations) ──
 
   const householdsId = await ensureCollection({
