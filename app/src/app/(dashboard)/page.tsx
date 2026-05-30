@@ -340,10 +340,10 @@ export default function DashboardPage() {
         household: householdId,
         name: bmForm.name.trim(),
         url: bmForm.url.trim(),
-        emoji: bmForm.emoji.trim() || "🔖",
-        description: bmForm.description.trim(),
+        emoji: bmForm.emoji.trim() || null,
+        description: bmForm.description.trim() || null,
         visibility: bmForm.visibility,
-        created_by: bmForm.visibility === "me" ? (user?.id ?? "") : "",
+        created_by: bmForm.visibility === "me" ? (user?.id ?? null) : null,
       };
       if (bmForm.id) {
         const updated = await pb.collection("bookmarks").update(bmForm.id, payload);
@@ -353,6 +353,8 @@ export default function DashboardPage() {
         setBookmarks((prev) => [...prev, created as unknown as Bookmark]);
       }
       setBmForm(null);
+    } catch (err: any) {
+      alert("Failed to save bookmark: " + (err?.message ?? "unknown error"));
     } finally {
       setBmSaving(false);
     }

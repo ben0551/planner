@@ -59,10 +59,10 @@ export default function BookmarksPage() {
         household: householdId,
         name: form.name.trim(),
         url: form.url.trim(),
-        emoji: form.emoji.trim(),
-        description: form.description.trim(),
+        emoji: form.emoji.trim() || null,
+        description: form.description.trim() || null,
         visibility: form.visibility,
-        created_by: form.visibility === "me" ? (user?.id ?? "") : "",
+        created_by: form.visibility === "me" ? (user?.id ?? null) : null,
       };
       if (form.id) {
         const updated = await pb.collection("bookmarks").update(form.id, payload);
