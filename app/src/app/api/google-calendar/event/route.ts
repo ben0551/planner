@@ -64,8 +64,16 @@ export async function PATCH(req: NextRequest) {
     const timeZone = await resolveTimezone(adminToken, rec, accessToken);
     const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone });
 
-    if (googleEventId) {
-      await updateGoogleEvent(accessToken, rec.calendar_id, googleEventId, gEvent);
+    // Always fetch the current external_id from PocketBase — the client's copy may be stale
+    // if the original create push hadn't completed when the user last fetched events.
+    let resolvedGoogleEventId = googleEventId || null;
+    if (!resolvedGoogleEventId && plannerEventId) {
+      const current = await pbAdmin(adminToken, `collections/calendar_events/records/${plannerEventId}`).catch(() => null);
+      resolvedGoogleEventId = current?.external_id || null;
+    }
+
+    if (resolvedGoogleEventId) {
+      await updateGoogleEvent(accessToken, rec.calendar_id, resolvedGoogleEventId, gEvent);
       return Response.json({ ok: true });
     } else {
       const created = await createGoogleEvent(accessToken, rec.calendar_id, gEvent);
