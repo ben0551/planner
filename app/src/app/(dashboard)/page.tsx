@@ -287,7 +287,7 @@ export default function DashboardPage() {
       setStreaks(memberStreaks);
       setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")));
 
-      const bms = await pb.collection("bookmarks").getFullList({ filter: `household~"${householdId}"`, sort: "created" });
+      const bms = await pb.collection("bookmarks").getFullList({ sort: "created" });
       setBookmarks(bms as unknown as Bookmark[]);
 
       setLoading(false);

@@ -541,7 +541,11 @@ export async function ensureSchema(): Promise<string[]> {
     return fresh[target]?.id;
   }
 
+  // bookmarks collection has a known PocketBase 0.38 relation-storage quirk —
+  // patching its schema breaks the household field filter. Skip it here.
+  const SKIP_REPAIR = new Set(["bookmarks"]);
   for (const name of AUTH_COLS) {
+    if (SKIP_REPAIR.has(name)) continue;
     const col = fresh[name];
     if (!col) continue;
     const fields: any[] = col.fields ?? col.schema ?? [];
