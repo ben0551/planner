@@ -373,6 +373,7 @@ export async function ensureSchema(): Promise<string[]> {
     { name: "custom_gradient", type: "text" },
     { name: "custom_bg_image", type: "file", options: { maxSelect: 1, mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"] } },
     { name: "custom_primary", type: "text" },
+    { name: "hidden_bookmarks", type: "json" },
   ]);
   await addMissingFields("chores", [
     { name: "type", ...sel(["single", "everyone", "shared"]) },

@@ -76,6 +76,7 @@ export interface Membership {
   custom_gradient?: string;  // CSS background value (gradient or image CSS)
   custom_bg_image?: string;  // PocketBase filename of uploaded background image
   custom_primary?: string;   // CSS color value for --primary / --ring
+  hidden_bookmarks?: string[];
   expand?: { household?: Household; user?: User };
 }
 

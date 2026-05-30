@@ -38,6 +38,22 @@ function choreCardColor(id: string) {
   return CARD_COLORS[h % CARD_COLORS.length];
 }
 
+function faviconUrl(url: string) {
+  try { return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`; }
+  catch { return ""; }
+}
+
+function BookmarkIcon({ bm }: { bm: Bookmark }) {
+  const [failed, setFailed] = React.useState(false);
+  const hasEmoji = bm.emoji && bm.emoji.trim() !== "" && bm.emoji.trim() !== "🔖";
+  if (hasEmoji) return <span className="text-2xl leading-none">{bm.emoji}</span>;
+  const fav = faviconUrl(bm.url);
+  if (fav && !failed) {
+    return <img src={fav} alt="" className="h-8 w-8 object-contain" onError={() => setFailed(true)} />;
+  }
+  return <span className="text-2xl leading-none">🔖</span>;
+}
+
 function greeting(name: string) {
   const h = new Date().getHours();
   const prefix = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
@@ -176,6 +192,8 @@ export default function DashboardPage() {
   const [bmForm, setBmForm] = useState<{ id?: string; name: string; url: string; emoji: string; description: string; visibility: "all" | "me" } | null>(null);
   const [bmSaving, setBmSaving] = useState(false);
   const [bmReveal, setBmReveal] = useState<Set<string>>(new Set());
+  const [bmHidden, setBmHidden] = useState<string[]>([]);
+  const [bmShowHidden, setBmShowHidden] = useState(false);
 
   const firstName = (user?.name as string)?.split(" ")[0] ?? "there";
   const householdName = membership?.expand?.household?.name ?? "";
@@ -292,6 +310,12 @@ export default function DashboardPage() {
     }
   }, [membership?.id]);
 
+  useEffect(() => {
+    if (!membership) return;
+    const h = Array.isArray(membership.hidden_bookmarks) ? (membership.hidden_bookmarks as string[]) : [];
+    setBmHidden(h);
+  }, [membership?.id]);
+
   function moveWidget(index: number, dir: -1 | 1) {
     const next = [...widgetOrder];
     const to = index + dir;
@@ -339,9 +363,18 @@ export default function DashboardPage() {
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
   }
 
-  const visibleBookmarks = bookmarks.filter(
+  const myBookmarks = bookmarks.filter(
     (b) => b.visibility !== "me" || b.created_by === user?.id
   );
+  const visibleBookmarks = myBookmarks.filter((b) => !bmHidden.includes(b.id));
+  const hiddenBookmarks = myBookmarks.filter((b) => bmHidden.includes(b.id));
+
+  async function toggleHideBookmark(id: string) {
+    if (!membership) return;
+    const next = bmHidden.includes(id) ? bmHidden.filter((x) => x !== id) : [...bmHidden, id];
+    setBmHidden(next);
+    await pb.collection("memberships").update(membership.id, { hidden_bookmarks: next });
+  }
 
   const _today = todayStr();
   const overdueTasks = allTasks.filter((t) => !t.due_date || t.due_date < _today);
@@ -575,7 +608,8 @@ export default function DashboardPage() {
     }
 
     if (id === "bookmarks") {
-      if (!editOrder && visibleBookmarks.length === 0 && !bmForm) return null;
+      if (!editOrder && visibleBookmarks.length === 0 && hiddenBookmarks.length === 0 && !bmForm) return null;
+      const formFavicon = bmForm?.url ? faviconUrl(bmForm.url) : "";
       return (
         <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
           <div className="px-4 pt-3 pb-2 flex items-center justify-between">
@@ -584,7 +618,7 @@ export default function DashboardPage() {
               {moveButtons}
             </div>
             <button
-              onClick={() => setBmForm({ name: "", url: "", emoji: "🔖", description: "", visibility: "all" })}
+              onClick={() => setBmForm({ name: "", url: "", emoji: "", description: "", visibility: "all" })}
               className="text-xs text-orange-500 font-medium hover:underline flex items-center gap-0.5"
             >
               <Plus className="h-3 w-3" />
@@ -595,13 +629,17 @@ export default function DashboardPage() {
           {/* Add / edit form */}
           {bmForm && (
             <div className="mx-4 mb-3 p-3 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
-              <div className="flex gap-2">
-                <input
-                  value={bmForm.emoji}
-                  onChange={(e) => setBmForm({ ...bmForm, emoji: e.target.value })}
-                  placeholder="🔖"
-                  className="w-12 h-9 text-center text-xl rounded-lg border border-input bg-background"
-                />
+              <div className="flex gap-2 items-center">
+                {/* Favicon preview or emoji override */}
+                <div className="w-10 h-10 rounded-lg border border-input bg-background flex items-center justify-center shrink-0 overflow-hidden">
+                  {bmForm.emoji.trim() ? (
+                    <span className="text-xl">{bmForm.emoji}</span>
+                  ) : formFavicon ? (
+                    <img src={formFavicon} alt="" className="h-7 w-7 object-contain" onError={(e) => (e.currentTarget.style.display = "none")} />
+                  ) : (
+                    <span className="text-xl">🔖</span>
+                  )}
+                </div>
                 <input
                   value={bmForm.name}
                   onChange={(e) => setBmForm({ ...bmForm, name: e.target.value })}
@@ -612,24 +650,30 @@ export default function DashboardPage() {
               <input
                 value={bmForm.url}
                 onChange={(e) => setBmForm({ ...bmForm, url: e.target.value })}
-                placeholder="https://…"
+                placeholder="https://… (icon auto-detected from URL)"
                 type="url"
+                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+              />
+              <input
+                value={bmForm.emoji}
+                onChange={(e) => setBmForm({ ...bmForm, emoji: e.target.value })}
+                placeholder="Emoji override (optional — leave blank to use site icon)"
                 className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
               />
               <textarea
                 value={bmForm.description}
                 onChange={(e) => setBmForm({ ...bmForm, description: e.target.value })}
-                placeholder="Notes / credentials (hidden by default)"
+                placeholder="Notes / credentials (tap 👁 to reveal — not shown by default)"
                 rows={2}
                 className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm resize-none"
               />
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex rounded-lg border border-input overflow-hidden text-xs font-medium">
                   <button
                     onClick={() => setBmForm({ ...bmForm, visibility: "all" })}
                     className={cn("px-3 py-1.5 transition-colors", bmForm.visibility === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted")}
                   >
-                    All
+                    All household
                   </button>
                   <button
                     onClick={() => setBmForm({ ...bmForm, visibility: "me" })}
@@ -653,7 +697,7 @@ export default function DashboardPage() {
           )}
 
           {visibleBookmarks.length > 0 ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 px-4 pb-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 px-4 pb-3">
               {visibleBookmarks.map((bm) => {
                 const revealed = bmReveal.has(bm.id);
                 return (
@@ -664,33 +708,39 @@ export default function DashboardPage() {
                       rel="noopener noreferrer"
                       className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:bg-muted/50 transition-colors text-center"
                     >
-                      <span className="text-2xl leading-none">{bm.emoji || "🔖"}</span>
+                      <BookmarkIcon bm={bm} />
                       <span className="text-[11px] font-semibold leading-tight line-clamp-2">{bm.name}</span>
                       {bm.visibility === "me" && (
                         <span className="text-[9px] text-muted-foreground">Only me</span>
                       )}
                     </a>
 
-                    {/* Description reveal + edit/delete controls */}
+                    {/* Controls on hover */}
                     <div className="absolute -top-1.5 -right-1.5 hidden group-hover/bm:flex gap-0.5">
                       {bm.description && (
                         <button
-                          onClick={() => setBmReveal((prev) => {
-                            const s = new Set(prev);
-                            s.has(bm.id) ? s.delete(bm.id) : s.add(bm.id);
-                            return s;
-                          })}
+                          onClick={() => setBmReveal((prev) => { const s = new Set(prev); s.has(bm.id) ? s.delete(bm.id) : s.add(bm.id); return s; })}
                           className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm"
                         >
                           {revealed ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
                         </button>
                       )}
                       <button
-                        onClick={() => setBmForm({ id: bm.id, name: bm.name, url: bm.url, emoji: bm.emoji ?? "🔖", description: bm.description ?? "", visibility: bm.visibility })}
+                        onClick={() => setBmForm({ id: bm.id, name: bm.name, url: bm.url, emoji: bm.emoji ?? "", description: bm.description ?? "", visibility: bm.visibility })}
                         className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm"
                       >
                         <Pencil className="h-2.5 w-2.5" />
                       </button>
+                      {/* Hide (for household bookmarks — hides for just this user) */}
+                      {bm.visibility === "all" && (
+                        <button
+                          onClick={() => toggleHideBookmark(bm.id)}
+                          title="Hide for me"
+                          className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-amber-500 shadow-sm"
+                        >
+                          <EyeOff className="h-2.5 w-2.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => deleteBookmark(bm.id)}
                         className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-destructive shadow-sm"
@@ -711,6 +761,35 @@ export default function DashboardPage() {
             </div>
           ) : (
             !bmForm && <div className="px-4 pb-3 text-sm text-muted-foreground">No bookmarks yet — add a shortcut above.</div>
+          )}
+
+          {/* Hidden bookmarks section */}
+          {hiddenBookmarks.length > 0 && (
+            <div className="px-4 pb-3">
+              <button
+                onClick={() => setBmShowHidden((v) => !v)}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+              >
+                <Eye className="h-3 w-3" />
+                {bmShowHidden ? "Hide" : `Show ${hiddenBookmarks.length} hidden`}
+              </button>
+              {bmShowHidden && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-2 opacity-50">
+                  {hiddenBookmarks.map((bm) => (
+                    <div key={bm.id} className="flex flex-col items-center gap-1 p-2 rounded-xl border border-dashed border-border text-center">
+                      <BookmarkIcon bm={bm} />
+                      <span className="text-[10px] font-medium leading-tight line-clamp-1">{bm.name}</span>
+                      <button
+                        onClick={() => toggleHideBookmark(bm.id)}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        Unhide
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       );
