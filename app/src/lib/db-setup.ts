@@ -564,12 +564,21 @@ export async function ensureSchema(): Promise<string[]> {
     }
   }
 
+  // ── log bookmarks schema for diagnostics ──
+  const bmCol = fresh["bookmarks"];
+  if (bmCol) {
+    const bmFields: any[] = bmCol.fields ?? bmCol.schema ?? [];
+    const hhField = bmFields.find((f: any) => f.name === "household");
+    log.push(`bookmarks.household field: ${hhField ? `type=${hhField.type} collectionId=${hhField.collectionId}` : "MISSING"}`);
+    log.push(`expected householdsId: ${fresh["households"]?.id ?? "unknown"}`);
+  }
+
   // ── filter-based diagnostic: confirm household relation works ──
   const sampleHh = await pbApi(token, "collections/households/records?perPage=1&skipTotal=1").catch(() => null);
   const sampleHhId = sampleHh?.items?.[0]?.id;
   if (sampleHhId) {
     const filterQ = encodeURIComponent(`household="${sampleHhId}"`);
-    for (const name of ["notes", "shopping_items", "shopping_lists", "chores"]) {
+    for (const name of ["notes", "shopping_items", "shopping_lists", "chores", "bookmarks"]) {
       try {
         await pbApi(token, `collections/${name}/records?perPage=1&skipTotal=1&filter=${filterQ}`);
         log.push(`${name}: household filter OK`);
