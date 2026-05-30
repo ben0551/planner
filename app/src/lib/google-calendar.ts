@@ -203,10 +203,23 @@ export function fromGoogleEvent(
     endObj.setUTCDate(endObj.getUTCDate() - 1); // reverse the exclusive offset
     end = `${endObj.toISOString().substring(0, 10)} 23:59:59`;
   } else {
-    const fmt = (iso: string) =>
-      new Date(iso).toISOString().replace("T", " ").substring(0, 19);
-    start = fmt(ev.start.dateTime!);
-    end = fmt(ev.end?.dateTime ?? ev.start.dateTime!);
+    const fmt = (iso: string, tz?: string): string => {
+      const d = new Date(iso);
+      if (tz) {
+        try {
+          const parts = new Intl.DateTimeFormat("en-CA", {
+            timeZone: tz, hourCycle: "h23",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+          }).formatToParts(d);
+          const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+          return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+        } catch {}
+      }
+      return iso.replace("T", " ").substring(0, 19);
+    };
+    start = fmt(ev.start.dateTime!, ev.start.timeZone);
+    end = fmt(ev.end?.dateTime ?? ev.start.dateTime!, ev.end?.timeZone ?? ev.start.timeZone);
   }
 
   return {
