@@ -78,7 +78,13 @@ export async function listCalendars(accessToken: string): Promise<GoogleCalendar
   const res = await fetch(`${GOOGLE_API_BASE}/users/me/calendarList`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Failed to list Google calendars: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    if (res.status === 403 && body.includes("disabled")) throw new Error("Google Calendar API is not enabled. Go to console.cloud.google.com → APIs & Services and enable 'Google Calendar API'.");
+    if (res.status === 401) throw new Error("Google access token rejected. Try disconnecting and reconnecting Google Calendar in Settings.");
+    if (res.status === 403) throw new Error("Permission denied. Make sure your Google account has calendar access and the OAuth app is published or your account is in the test users list.");
+    throw new Error(`Failed to list Google calendars (${res.status}): ${body.slice(0, 200)}`);
+  }
   const data = await res.json();
   return (data.items ?? []) as GoogleCalendar[];
 }
