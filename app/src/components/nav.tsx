@@ -30,19 +30,21 @@ import {
   ShieldCheck,
   Heart,
   MoreHorizontal,
+  Bookmark,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/",          label: "Today",        icon: Home,            emoji: "🏠" },
-  { href: "/chores",    label: "Chores",        icon: ListChecks,      emoji: "✅" },
-  { href: "/progress",  label: "Progress",      icon: TrendingUp,      emoji: "📊" },
-  { href: "/rewards",   label: "Rewards",       icon: Trophy,          emoji: "🏆" },
-  { href: "/shopping",  label: "Shopping List", icon: ShoppingCart,    emoji: "🛒" },
-  { href: "/calendar",  label: "Calendar",      icon: CalendarDays,    emoji: "📅" },
-  { href: "/meals",     label: "Meal Planner",  icon: UtensilsCrossed, emoji: "🍽️" },
-  { href: "/tasks",     label: "Tasks",         icon: ClipboardList,   emoji: "📋" },
-  { href: "/notes",     label: "Notes",         icon: StickyNote,      emoji: "📝" },
-  { href: "/settings",  label: "Settings",      icon: Settings,        emoji: "⚙️" },
+  { href: "/",            label: "Today",        icon: Home,            emoji: "🏠" },
+  { href: "/chores",      label: "Chores",       icon: ListChecks,      emoji: "✅" },
+  { href: "/progress",    label: "Progress",     icon: TrendingUp,      emoji: "📊" },
+  { href: "/rewards",     label: "Rewards",      icon: Trophy,          emoji: "🏆" },
+  { href: "/shopping",    label: "Shopping",     icon: ShoppingCart,    emoji: "🛒" },
+  { href: "/calendar",    label: "Calendar",     icon: CalendarDays,    emoji: "📅" },
+  { href: "/meals",       label: "Meals",        icon: UtensilsCrossed, emoji: "🍽️" },
+  { href: "/tasks",       label: "Tasks",        icon: ClipboardList,   emoji: "📋" },
+  { href: "/notes",       label: "Notes",        icon: StickyNote,      emoji: "📝" },
+  { href: "/bookmarks",   label: "Bookmarks",    icon: Bookmark,        emoji: "🔖" },
+  { href: "/settings",    label: "Settings",     icon: Settings,        emoji: "⚙️" },
 ];
 
 const MOBILE_PRIMARY_HREFS = ["/", "/chores", "/calendar", "/notes"];
