@@ -25,12 +25,26 @@ export async function GET(req: NextRequest) {
 
     const creds = await getGoogleCredentials(householdId);
     const accessToken = await getAccessToken(rec.refresh_token, creds);
+    const isFullSync = !rec.sync_token;
     const { items, nextSyncToken } = await listEvents(accessToken, rec.calendar_id, rec.sync_token || undefined);
+
+    // On a full sync, wipe existing Google-sourced events so stale instance records don't persist
+    if (isFullSync) {
+      const stale = await pbAdmin(
+        adminToken,
+        `collections/calendar_events/records?filter=${encodeURIComponent(`household="${householdId}" && source="google"`)}&perPage=2500&skipTotal=1`,
+      );
+      for (const r of stale?.items ?? []) {
+        await pbAdmin(adminToken, `collections/calendar_events/records/${r.id}`, "DELETE");
+      }
+    }
 
     let created = 0, updated = 0, deleted = 0;
 
     for (const gEvent of items) {
       if (!gEvent.id) continue;
+      // Skip exception instances — the master recurring event covers all dates
+      if (gEvent.recurringEventId) continue;
       const existing = await pbAdmin(
         adminToken,
         `collections/calendar_events/records?filter=${encodeURIComponent(`household="${householdId}" && external_id="${gEvent.id}"`)}&perPage=1`,

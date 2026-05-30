@@ -9,6 +9,8 @@ export interface GCalEvent {
   start: { date?: string; dateTime?: string; timeZone?: string };
   end: { date?: string; dateTime?: string; timeZone?: string };
   status?: string;
+  recurrence?: string[];
+  recurringEventId?: string;
 }
 
 export interface GoogleCalendar {
@@ -103,8 +105,6 @@ export async function listEvents(
     const since = new Date();
     since.setFullYear(since.getFullYear() - 1);
     url.searchParams.set("timeMin", since.toISOString());
-    url.searchParams.set("singleEvents", "true");
-    url.searchParams.set("orderBy", "startTime");
   }
   url.searchParams.set("maxResults", "2500");
 
@@ -197,6 +197,29 @@ export function toGoogleEvent(ev: {
   };
 }
 
+function parseRRule(rules: string[]): { recurrence?: string; recurrence_until?: string } {
+  const rrule = rules.find((r) => r.startsWith("RRULE:"));
+  if (!rrule) return {};
+  const params: Record<string, string> = {};
+  rrule.slice(6).split(";").forEach((part) => {
+    const [k, v] = part.split("=");
+    if (k) params[k] = v ?? "";
+  });
+  const interval = parseInt(params.INTERVAL ?? "1");
+  let recurrence: string | undefined;
+  if (params.FREQ === "DAILY") recurrence = "daily";
+  else if (params.FREQ === "WEEKLY" && interval === 2) recurrence = "fortnightly";
+  else if (params.FREQ === "WEEKLY") recurrence = "weekly";
+  else if (params.FREQ === "MONTHLY") recurrence = "monthly";
+  else if (params.FREQ === "YEARLY") recurrence = "yearly";
+  let recurrence_until: string | undefined;
+  if (params.UNTIL) {
+    const r = params.UNTIL;
+    recurrence_until = `${r.slice(0, 4)}-${r.slice(4, 6)}-${r.slice(6, 8)}`;
+  }
+  return { recurrence, recurrence_until };
+}
+
 // Google event → Planner record fields
 export function fromGoogleEvent(
   ev: GCalEvent,
@@ -210,6 +233,8 @@ export function fromGoogleEvent(
   external_id: string;
   source: string;
   notes?: string;
+  recurrence?: string;
+  recurrence_until?: string;
 } {
   const allDay = !!ev.start.date;
   let start: string;
@@ -240,6 +265,8 @@ export function fromGoogleEvent(
     end = fmt(ev.end?.dateTime ?? ev.start.dateTime!, ev.end?.timeZone ?? ev.start.timeZone);
   }
 
+  const { recurrence, recurrence_until } = ev.recurrence ? parseRRule(ev.recurrence) : {};
+
   return {
     household: householdId,
     title: ev.summary ?? "(No title)",
@@ -249,5 +276,7 @@ export function fromGoogleEvent(
     external_id: ev.id!,
     source: "google",
     notes: ev.description || undefined,
+    ...(recurrence ? { recurrence } : {}),
+    ...(recurrence_until ? { recurrence_until } : {}),
   };
 }
