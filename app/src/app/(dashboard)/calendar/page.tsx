@@ -280,6 +280,16 @@ export default function CalendarPage() {
       };
       if (editingEvent) {
         await pb.collection("calendar_events").update(editingEvent.id, payload);
+        if (gcalConnected) {
+          fetch("/api/google-calendar/event", {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              householdId, plannerEventId: editingEvent.id,
+              googleEventId: editingEvent.external_id || null,
+              ...payload, allDay,
+            }),
+          });
+        }
       } else {
         const ev = await pb.collection("calendar_events").create({ household: householdId, source: "manual", ...payload });
         if (gcalConnected) {

@@ -136,6 +136,24 @@ export async function createGoogleEvent(
   return res.json();
 }
 
+export async function updateGoogleEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  event: GCalEvent,
+): Promise<GCalEvent> {
+  const res = await fetch(
+    `${GOOGLE_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    },
+  );
+  if (!res.ok) throw new Error("Failed to update Google Calendar event");
+  return res.json();
+}
+
 export async function deleteGoogleEvent(
   accessToken: string,
   calendarId: string,
