@@ -78,7 +78,7 @@ export async function ensureSchema(): Promise<string[]> {
   }
 
   // Collections that should have authenticated-only access
-  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions", "push_subscriptions"]);
+  const AUTH_COLS = new Set(["households", "memberships", "chores", "chore_completions", "meals", "meal_recipes", "shopping_lists", "shopping_items", "shopping_catalog", "goals", "calendar_events", "tasks", "notes", "activity_log", "balance_transactions", "push_subscriptions", "bookmarks"]);
   const AUTH_RULE = '@request.auth.id != ""';
 
   async function addMissingFields(name: string, newFields: any[]) {
@@ -276,6 +276,19 @@ export async function ensureSchema(): Promise<string[]> {
       { name: "content", type: "text", required: true },
       { name: "color", type: "text" },
       { name: "pinned", type: "bool" },
+    ],
+  });
+
+  await ensureCollection({
+    name: "bookmarks",
+    fields: [
+      { name: "household", ...rel(householdsId), required: true },
+      { name: "name", type: "text", required: true },
+      { name: "url", type: "text", required: true },
+      { name: "emoji", type: "text" },
+      { name: "description", type: "text" },
+      { name: "visibility", type: "text" },
+      { name: "created_by", ...rel(PB_USERS_ID) },
     ],
   });
 

@@ -217,6 +217,18 @@ export interface Note {
   created: string;
 }
 
+export interface Bookmark {
+  id: string;
+  household: string;
+  name: string;
+  url: string;
+  emoji?: string;
+  description?: string;
+  visibility: "all" | "me";
+  created_by?: string;
+  created: string;
+}
+
 export interface BalanceTransaction {
   id: string;
   household: string;

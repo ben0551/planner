@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
-import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note } from "@/lib/pocketbase";
+import { getClient, type Chore, type ChoreCompletion, type CalendarEvent, type Task, type Note, type Bookmark } from "@/lib/pocketbase";
 import Link from "next/link";
-import { CheckCircle2, Star, Wallet, ChevronUp, ChevronDown, Settings2 } from "lucide-react";
+import { CheckCircle2, Star, Wallet, ChevronUp, ChevronDown, Settings2, ExternalLink, Plus, Pencil, Trash2, Eye, EyeOff, X } from "lucide-react";
 import { getLevel } from "@/lib/levels";
 import { cn } from "@/lib/utils";
 
@@ -150,8 +150,8 @@ const NOTE_BG: Record<string, string> = {
   "bg-orange-100":  "bg-orange-100 border-orange-200",
 };
 
-type WidgetId = "streaks" | "upcoming" | "chores" | "notes";
-const DEFAULT_WIDGET_ORDER: WidgetId[] = ["streaks", "upcoming", "chores", "notes"];
+type WidgetId = "streaks" | "upcoming" | "chores" | "notes" | "bookmarks";
+const DEFAULT_WIDGET_ORDER: WidgetId[] = ["bookmarks", "streaks", "upcoming", "chores", "notes"];
 
 export default function DashboardPage() {
   const { user, membership, householdId } = useAuth();
@@ -167,9 +167,15 @@ export default function DashboardPage() {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [streaks, setStreaks] = useState<{ name: string; streak: number; weekPts: number }[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [widgetOrder, setWidgetOrder] = useState<WidgetId[]>(DEFAULT_WIDGET_ORDER);
   const [editOrder, setEditOrder] = useState(false);
+
+  // Bookmark editing state
+  const [bmForm, setBmForm] = useState<{ id?: string; name: string; url: string; emoji: string; description: string; visibility: "all" | "me" } | null>(null);
+  const [bmSaving, setBmSaving] = useState(false);
+  const [bmReveal, setBmReveal] = useState<Set<string>>(new Set());
 
   const firstName = (user?.name as string)?.split(" ")[0] ?? "there";
   const householdName = membership?.expand?.household?.name ?? "";
@@ -262,6 +268,10 @@ export default function DashboardPage() {
       setAllTasks(visibleTasks);
       setStreaks(memberStreaks);
       setNotes(pinnedNotes.filter((n) => n.pinned).sort((a, b) => (b.created ?? b.id ?? "").localeCompare(a.created ?? a.id ?? "")));
+
+      const bms = await pb.collection("bookmarks").getFullList({ filter: `household="${householdId}"`, sort: "created" });
+      setBookmarks(bms as unknown as Bookmark[]);
+
       setLoading(false);
     }
 
@@ -274,7 +284,10 @@ export default function DashboardPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as WidgetId[];
-        if (DEFAULT_WIDGET_ORDER.every((id) => parsed.includes(id))) setWidgetOrder(parsed);
+        const validIds = new Set(DEFAULT_WIDGET_ORDER);
+        const filtered = parsed.filter((id) => validIds.has(id));
+        const missing = DEFAULT_WIDGET_ORDER.filter((id) => !filtered.includes(id));
+        if (filtered.length > 0) setWidgetOrder([...filtered, ...missing]);
       } catch { /* ignore bad json */ }
     }
   }, [membership?.id]);
@@ -294,6 +307,41 @@ export default function DashboardPage() {
     await pb.collection("tasks").update(id, { completed: true });
     setAllTasks((prev) => prev.filter((t) => t.id !== id));
   }
+
+  async function saveBookmark() {
+    if (!bmForm || !householdId || !bmForm.name.trim() || !bmForm.url.trim()) return;
+    setBmSaving(true);
+    try {
+      const payload = {
+        household: householdId,
+        name: bmForm.name.trim(),
+        url: bmForm.url.trim(),
+        emoji: bmForm.emoji.trim() || "🔖",
+        description: bmForm.description.trim(),
+        visibility: bmForm.visibility,
+        created_by: bmForm.visibility === "me" ? (user?.id ?? "") : "",
+      };
+      if (bmForm.id) {
+        const updated = await pb.collection("bookmarks").update(bmForm.id, payload);
+        setBookmarks((prev) => prev.map((b) => b.id === bmForm.id ? updated as unknown as Bookmark : b));
+      } else {
+        const created = await pb.collection("bookmarks").create(payload);
+        setBookmarks((prev) => [...prev, created as unknown as Bookmark]);
+      }
+      setBmForm(null);
+    } finally {
+      setBmSaving(false);
+    }
+  }
+
+  async function deleteBookmark(id: string) {
+    await pb.collection("bookmarks").delete(id);
+    setBookmarks((prev) => prev.filter((b) => b.id !== id));
+  }
+
+  const visibleBookmarks = bookmarks.filter(
+    (b) => b.visibility !== "me" || b.created_by === user?.id
+  );
 
   const _today = todayStr();
   const overdueTasks = allTasks.filter((t) => !t.due_date || t.due_date < _today);
@@ -521,6 +569,148 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="px-4 pb-3 text-sm text-muted-foreground">No pinned notes.</div>
+          )}
+        </div>
+      );
+    }
+
+    if (id === "bookmarks") {
+      if (!editOrder && visibleBookmarks.length === 0 && !bmForm) return null;
+      return (
+        <div className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <h2 className="font-bold text-sm">🔖 Bookmarks</h2>
+              {moveButtons}
+            </div>
+            <button
+              onClick={() => setBmForm({ name: "", url: "", emoji: "🔖", description: "", visibility: "all" })}
+              className="text-xs text-orange-500 font-medium hover:underline flex items-center gap-0.5"
+            >
+              <Plus className="h-3 w-3" />
+              Add
+            </button>
+          </div>
+
+          {/* Add / edit form */}
+          {bmForm && (
+            <div className="mx-4 mb-3 p-3 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  value={bmForm.emoji}
+                  onChange={(e) => setBmForm({ ...bmForm, emoji: e.target.value })}
+                  placeholder="🔖"
+                  className="w-12 h-9 text-center text-xl rounded-lg border border-input bg-background"
+                />
+                <input
+                  value={bmForm.name}
+                  onChange={(e) => setBmForm({ ...bmForm, name: e.target.value })}
+                  placeholder="Name"
+                  className="flex-1 h-9 rounded-lg border border-input bg-background px-2.5 text-sm"
+                />
+              </div>
+              <input
+                value={bmForm.url}
+                onChange={(e) => setBmForm({ ...bmForm, url: e.target.value })}
+                placeholder="https://…"
+                type="url"
+                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+              />
+              <textarea
+                value={bmForm.description}
+                onChange={(e) => setBmForm({ ...bmForm, description: e.target.value })}
+                placeholder="Notes / credentials (hidden by default)"
+                rows={2}
+                className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm resize-none"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex rounded-lg border border-input overflow-hidden text-xs font-medium">
+                  <button
+                    onClick={() => setBmForm({ ...bmForm, visibility: "all" })}
+                    className={cn("px-3 py-1.5 transition-colors", bmForm.visibility === "all" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted")}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setBmForm({ ...bmForm, visibility: "me" })}
+                    className={cn("px-3 py-1.5 transition-colors border-l border-input", bmForm.visibility === "me" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted")}
+                  >
+                    Just me
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setBmForm(null)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                  <button
+                    onClick={saveBookmark}
+                    disabled={bmSaving || !bmForm.name.trim() || !bmForm.url.trim()}
+                    className="text-xs font-semibold text-primary hover:opacity-70 disabled:opacity-40"
+                  >
+                    {bmSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {visibleBookmarks.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 px-4 pb-4">
+              {visibleBookmarks.map((bm) => {
+                const revealed = bmReveal.has(bm.id);
+                return (
+                  <div key={bm.id} className="relative group/bm">
+                    <a
+                      href={bm.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-border hover:bg-muted/50 transition-colors text-center"
+                    >
+                      <span className="text-2xl leading-none">{bm.emoji || "🔖"}</span>
+                      <span className="text-[11px] font-semibold leading-tight line-clamp-2">{bm.name}</span>
+                      {bm.visibility === "me" && (
+                        <span className="text-[9px] text-muted-foreground">Only me</span>
+                      )}
+                    </a>
+
+                    {/* Description reveal + edit/delete controls */}
+                    <div className="absolute -top-1.5 -right-1.5 hidden group-hover/bm:flex gap-0.5">
+                      {bm.description && (
+                        <button
+                          onClick={() => setBmReveal((prev) => {
+                            const s = new Set(prev);
+                            s.has(bm.id) ? s.delete(bm.id) : s.add(bm.id);
+                            return s;
+                          })}
+                          className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm"
+                        >
+                          {revealed ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setBmForm({ id: bm.id, name: bm.name, url: bm.url, emoji: bm.emoji ?? "🔖", description: bm.description ?? "", visibility: bm.visibility })}
+                        className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm"
+                      >
+                        <Pencil className="h-2.5 w-2.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteBookmark(bm.id)}
+                        className="h-5 w-5 rounded-full bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-destructive shadow-sm"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+
+                    {/* Description tooltip */}
+                    {revealed && bm.description && (
+                      <div className="absolute top-full left-0 right-0 mt-1 z-10 p-2 rounded-xl bg-popover border border-border shadow-lg text-xs whitespace-pre-wrap break-words">
+                        {bm.description}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            !bmForm && <div className="px-4 pb-3 text-sm text-muted-foreground">No bookmarks yet — add a shortcut above.</div>
           )}
         </div>
       );
