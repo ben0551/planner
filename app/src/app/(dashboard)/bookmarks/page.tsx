@@ -39,7 +39,7 @@ export default function BookmarksPage() {
   useEffect(() => {
     if (!householdId) return;
     pb.collection("bookmarks")
-      .getFullList({ filter: `household.id="${householdId}"`, sort: "created" })
+      .getFullList({ filter: `household~"${householdId}"`, sort: "created" })
       .then((r) => setBookmarks(r as unknown as Bookmark[]))
       .catch(() => {})
       .finally(() => setLoading(false));
