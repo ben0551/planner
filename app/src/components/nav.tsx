@@ -29,6 +29,7 @@ import {
   TrendingUp,
   ShieldCheck,
   Heart,
+  MoreHorizontal,
 } from "lucide-react";
 
 const navItems = [
@@ -44,7 +45,7 @@ const navItems = [
   { href: "/settings",  label: "Settings",      icon: Settings,        emoji: "⚙️" },
 ];
 
-const mobileNav = navItems.slice(0, 6);
+const MOBILE_PRIMARY_HREFS = ["/", "/chores", "/calendar", "/notes"];
 
 // Maps nav href to the permissions key it requires (undefined = always visible)
 const PAGE_PERMISSION_KEY: Record<string, keyof Permissions | undefined> = {
@@ -62,6 +63,11 @@ export function Nav() {
   const theme = getTheme(membership?.theme);
 
   const [liveGradient, setLiveGradient] = useState(theme.gradient);
+  const [showMore, setShowMore] = useState(false);
+
+  const mobilePrimary = navItems.filter((i) => MOBILE_PRIMARY_HREFS.includes(i.href));
+  const moreNavItems = navItems.filter((i) => !MOBILE_PRIMARY_HREFS.includes(i.href));
+  const moreActive = moreNavItems.some((i) => pathname === i.href);
   useEffect(() => {
     if (theme.name === "dynamic") {
       const tick = () => {
@@ -239,12 +245,13 @@ export function Nav() {
 
       {/* ── Mobile bottom tab bar ───────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t flex shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
-        {mobileNav.filter((item) => canSee(item.href)).map((item) => {
+        {mobilePrimary.filter((item) => canSee(item.href)).map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setShowMore(false)}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold transition-colors",
                 active ? "text-violet-600" : "text-muted-foreground"
@@ -255,7 +262,63 @@ export function Nav() {
             </Link>
           );
         })}
+        <button
+          onClick={() => setShowMore((v) => !v)}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold transition-colors",
+            (showMore || moreActive) ? "text-violet-600" : "text-muted-foreground"
+          )}
+        >
+          <MoreHorizontal className={cn("h-5 w-5", !showMore && !moreActive && "opacity-60")} />
+          More
+        </button>
       </nav>
+
+      {/* ── Mobile "More" drawer ────────────────────────── */}
+      {showMore && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/30"
+          onClick={() => setShowMore(false)}
+        >
+          <div
+            className="absolute bottom-[3.25rem] left-0 right-0 bg-card border-t rounded-t-2xl p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="grid grid-cols-4 gap-3">
+              {moreNavItems.filter((item) => canSee(item.href)).map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setShowMore(false)}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-colors text-center",
+                      active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <span className={cn("text-2xl leading-none", !active && "grayscale opacity-70")}>{item.emoji}</span>
+                    <span className="text-[10px] font-bold leading-tight">{item.label}</span>
+                  </Link>
+                );
+              })}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={() => setShowMore(false)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-colors text-center",
+                    pathname === "/admin" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
+                  )}
+                >
+                  <ShieldCheck className={cn("h-6 w-6", pathname !== "/admin" && "opacity-60")} />
+                  <span className="text-[10px] font-bold leading-tight">Admin</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
