@@ -66,6 +66,8 @@ export default function AdminPage() {
   const [pendingLoading, setPendingLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [syncLog, setSyncLog] = useState<string[] | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAdmin) router.replace("/");
@@ -99,6 +101,21 @@ export default function AdminPage() {
     setSaving(false);
   }
 
+  async function syncSchema() {
+    setSyncing(true);
+    setSyncLog(null);
+    try {
+      const res = await fetch("/api/admin/sync-schema", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      const data = await res.json();
+      setSyncLog(data.log ?? [data.error ?? "Unknown error"]);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function decide(householdId: string, status: "active" | "rejected") {
     setActionId(householdId);
     await fetch(`/api/admin/households/${householdId}`, {
@@ -118,6 +135,21 @@ export default function AdminPage() {
         <h1 className="text-2xl font-black">Admin</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage signups and household approvals.</p>
       </div>
+
+      <section className="bg-card rounded-2xl border border-border p-5 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-bold text-base">Database schema</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Force a schema sync — adds missing collections/fields and repairs access rules.</p>
+          </div>
+          <Button size="sm" disabled={syncing} onClick={syncSchema}>
+            {syncing ? "Syncing…" : "Sync now"}
+          </Button>
+        </div>
+        {syncLog && (
+          <pre className="text-xs bg-muted rounded-xl p-3 overflow-x-auto whitespace-pre-wrap max-h-48">{syncLog.join("\n")}</pre>
+        )}
+      </section>
 
       <section className="bg-card rounded-2xl border border-border p-5 flex flex-col gap-5">
         <h2 className="font-bold text-base">Signup settings</h2>
