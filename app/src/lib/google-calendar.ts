@@ -142,7 +142,7 @@ export async function createGoogleEvent(
       body: JSON.stringify(event),
     },
   );
-  if (!res.ok) throw new Error("Failed to create Google Calendar event");
+  if (!res.ok) throw new Error(`Failed to create Google Calendar event (${res.status}): ${await res.text()}`);
   return res.json();
 }
 
@@ -160,7 +160,7 @@ export async function updateGoogleEvent(
       body: JSON.stringify(event),
     },
   );
-  if (!res.ok) throw new Error("Failed to update Google Calendar event");
+  if (!res.ok) throw new Error(`Failed to update Google Calendar event (${res.status}): ${await res.text()}`);
   return res.json();
 }
 
