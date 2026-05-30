@@ -1,7 +1,20 @@
 import { type NextRequest } from "next/server";
 import { getPbAdminToken, PB_URL } from "@/app/api/_pb-admin";
-import { getAccessToken, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, toGoogleEvent } from "@/lib/google-calendar";
+import { getAccessToken, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, toGoogleEvent, getCalendarTimezone } from "@/lib/google-calendar";
 import { getGoogleCredentials, getGoogleTokenRecord } from "@/app/api/google-calendar/_credentials";
+
+async function resolveTimezone(adminToken: string, rec: any, accessToken: string): Promise<string | undefined> {
+  if (rec.calendar_timezone) return rec.calendar_timezone;
+  const tz = await getCalendarTimezone(accessToken, rec.calendar_id);
+  if (tz) {
+    await fetch(`${PB_URL}/api/collections/google_tokens/records/${rec.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: adminToken },
+      body: JSON.stringify({ calendar_timezone: tz }),
+    });
+  }
+  return tz;
+}
 
 async function pbAdmin(token: string, path: string, method = "GET", body?: object) {
   const res = await fetch(`${PB_URL}/api/${path}`, {
@@ -22,7 +35,8 @@ export async function POST(req: NextRequest) {
 
     const creds = await getGoogleCredentials(householdId);
     const accessToken = await getAccessToken(rec.refresh_token, creds);
-    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone: rec.calendar_timezone || undefined });
+    const timeZone = await resolveTimezone(adminToken, rec, accessToken);
+    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone });
     const created = await createGoogleEvent(accessToken, rec.calendar_id, gEvent);
 
     if (plannerEventId && created.id) {
@@ -47,7 +61,8 @@ export async function PATCH(req: NextRequest) {
 
     const creds = await getGoogleCredentials(householdId);
     const accessToken = await getAccessToken(rec.refresh_token, creds);
-    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone: rec.calendar_timezone || undefined });
+    const timeZone = await resolveTimezone(adminToken, rec, accessToken);
+    const gEvent = toGoogleEvent({ title, start, end, all_day: allDay, notes, timeZone });
 
     if (googleEventId) {
       await updateGoogleEvent(accessToken, rec.calendar_id, googleEventId, gEvent);

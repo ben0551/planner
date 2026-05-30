@@ -77,6 +77,15 @@ export async function getAccessToken(refreshToken: string, creds: GoogleCreds): 
   return data.access_token as string;
 }
 
+export async function getCalendarTimezone(accessToken: string, calendarId: string): Promise<string | undefined> {
+  const res = await fetch(`${GOOGLE_API_BASE}/calendars/${encodeURIComponent(calendarId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return undefined;
+  const data = await res.json();
+  return data.timeZone as string | undefined;
+}
+
 export async function listCalendars(accessToken: string): Promise<GoogleCalendar[]> {
   const res = await fetch(`${GOOGLE_API_BASE}/users/me/calendarList`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -190,13 +199,23 @@ export function toGoogleEvent(ev: {
       end: { date: endObj.toISOString().substring(0, 10) },
     };
   }
-  // Strip any trailing Z/offset — the time is already in local wall-clock, timezone specified separately
-  const toIso = (s: string) => s.replace(" ", "T").substring(0, 19);
+  if (ev.timeZone) {
+    // Send wall-clock time + IANA timezone — Google interprets it as local time
+    const toIso = (s: string) => s.replace(" ", "T").substring(0, 19);
+    return {
+      summary: ev.title,
+      description: ev.notes || undefined,
+      start: { dateTime: toIso(ev.start), timeZone: ev.timeZone },
+      end: { dateTime: toIso(ev.end), timeZone: ev.timeZone },
+    };
+  }
+  // No timezone stored yet — fall back to UTC (Z). Time will be offset but at least the request is valid.
+  const toIso = (s: string) => s.replace(" ", "T") + (s.length === 19 ? "Z" : "");
   return {
     summary: ev.title,
     description: ev.notes || undefined,
-    start: { dateTime: toIso(ev.start), ...(ev.timeZone ? { timeZone: ev.timeZone } : {}) },
-    end: { dateTime: toIso(ev.end), ...(ev.timeZone ? { timeZone: ev.timeZone } : {}) },
+    start: { dateTime: toIso(ev.start) },
+    end: { dateTime: toIso(ev.end) },
   };
 }
 
