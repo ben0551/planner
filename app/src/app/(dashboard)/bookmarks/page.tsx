@@ -209,7 +209,7 @@ export default function BookmarksPage() {
                 </a>
 
                 {/* Hover controls */}
-                <div className="absolute -top-2 -right-2 hidden group-hover/bm:flex gap-1">
+                <div className="absolute -top-2 -right-2 flex md:hidden md:group-hover/bm:flex gap-1">
                   {bm.description && (
                     <button
                       onClick={() => setReveal((prev) => { const s = new Set(prev); s.has(bm.id) ? s.delete(bm.id) : s.add(bm.id); return s; })}
