@@ -39,7 +39,9 @@ function cacheHousehold(householdId: string, householdName: string, members: Cac
   try {
     localStorage.setItem("planner_household", JSON.stringify({ id: householdId, name: householdName }));
     localStorage.setItem("planner_members", JSON.stringify(members));
-  } catch {}
+  } catch (err) {
+    console.error("[auth] failed to cache household for family login picker:", err);
+  }
 }
 
 function clearCache() {
@@ -114,31 +116,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMembership(typed);
       applyTheme(typed.theme, typed.custom_primary);
 
-      // Cache household + members list so the family login picker works offline
-      const householdId = typed.household;
-      const householdName = typed.expand?.household?.name ?? "";
-      const allMembers = await pb.collection("memberships").getFullList({
-        filter: `household="${householdId}"`,
-        expand: "user",
-      });
-      const cached: CachedMember[] = allMembers.map((mem: any) => {
-        const avatarFile = mem.expand?.user?.avatar as string | undefined;
-        const uid = mem.expand?.user?.id ?? mem.user;
-        return {
-          membershipId: mem.id,
-          userId: uid as string,
-          name: (mem.expand?.user?.name as string) ?? "Unknown",
-          email: (mem.expand?.user?.email as string) ?? "",
-          role: mem.role as string,
-          hasPin: Boolean(mem.pin),
-          permissions: mem.permissions as Permissions | undefined,
-          theme: mem.theme as string | undefined,
-          avatarUrl: avatarFile
-            ? `/pb/api/files/users/${uid}/${avatarFile}`
-            : undefined,
-        };
-      });
-      cacheHousehold(householdId, householdName, cached);
+      // Cache household + members list so the family login picker works offline.
+      // Isolated in its own try/catch — this is a non-critical enhancement, so a
+      // failure here (network blip, permission edge case) must not take down the
+      // rest of the membership fetch, and must not fail silently either.
+      try {
+        const householdId = typed.household;
+        const householdName = typed.expand?.household?.name ?? "";
+        const allMembers = await pb.collection("memberships").getFullList({
+          filter: `household="${householdId}"`,
+          expand: "user",
+        });
+        const cached: CachedMember[] = allMembers.map((mem: any) => {
+          const avatarFile = mem.expand?.user?.avatar as string | undefined;
+          const uid = mem.expand?.user?.id ?? mem.user;
+          return {
+            membershipId: mem.id,
+            userId: uid as string,
+            name: (mem.expand?.user?.name as string) ?? "Unknown",
+            email: (mem.expand?.user?.email as string) ?? "",
+            role: mem.role as string,
+            hasPin: Boolean(mem.pin),
+            permissions: mem.permissions as Permissions | undefined,
+            theme: mem.theme as string | undefined,
+            avatarUrl: avatarFile
+              ? `/pb/api/files/users/${uid}/${avatarFile}`
+              : undefined,
+          };
+        });
+        cacheHousehold(householdId, householdName, cached);
+      } catch (err) {
+        console.error("[auth] failed to fetch/cache household members for family login picker:", err);
+      }
     }
 
     fetchMembership().finally(() => setLoading(false));
