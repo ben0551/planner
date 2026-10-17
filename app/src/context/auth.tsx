@@ -51,7 +51,20 @@ function clearCache() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pb = getClient();
-  const [user, setUser] = useState<RecordModel | null>(pb.authStore.record);
+
+  // A dead session must not look like a live one. PocketBase's LocalAuthStore keeps
+  // returning its cached record after the token has expired, so seeding `user` straight
+  // from `authStore.record` left an expired session looking logged-in: the "not logged
+  // in" redirect never fired, the first memberships fetch failed, and the app rendered
+  // the "Create your household" screen instead of the family PIN picker.
+  // PIN logins use non-renewable impersonate tokens, so every PIN session reaches this
+  // point eventually — clear it up front and let the app route back to the picker.
+  const [user, setUser] = useState<RecordModel | null>(() => {
+    if (pb.authStore.token && !pb.authStore.isValid) {
+      pb.authStore.clear();
+    }
+    return pb.authStore.record;
+  });
   const [membership, setMembership] = useState<Membership | null>(null);
   const [loading, setLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
